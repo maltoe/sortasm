@@ -18,10 +18,11 @@ void combsort_asm(int, int*, int*);
 void quicksort_recursive(int, int*, int*);
 void quicksort_iterative(int, int*, int*);
 void quicksort_iterative_asm(int, int*, int*);
+void heapsort(int, int*, int*);
 
 typedef void (*sort_func)(int, int*, int*);
 
-const int num_sort_funcs = 12;
+const int num_sort_funcs = 13;
 const sort_func sort_funcs[]= {
     insertionsort,
     insertionsort_asm,
@@ -34,7 +35,8 @@ const sort_func sort_funcs[]= {
     combsort_asm,
     quicksort_recursive,
     quicksort_iterative,
-    quicksort_iterative_asm
+    quicksort_iterative_asm,
+    heapsort
 };
 const char* sort_func_names[] = {
     "insertionsort",
@@ -48,7 +50,8 @@ const char* sort_func_names[] = {
     "combsort_asm",
     "quicksort_recursive",
     "quicksort_iterative",
-    "quicksort_iterative_asm"
+    "quicksort_iterative_asm",
+    "heapsort"
 };
 
 /* ***************************************************************************
@@ -126,6 +129,20 @@ void main(int argc, char **argv)
     for(int i = 0; i < n; i++)
         printf("%d ", out[i]);
     printf("\n");
+}
+
+/* ***************************************************************************
+ * General helper functions.
+ * ***************************************************************************/
+
+#ifndef DEBUG
+inline
+#endif
+void swap(int *arr, int i, int j)
+{
+    int tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
 }
 
 /* ***************************************************************************
@@ -247,11 +264,8 @@ void bubblesort(int n, int *in, int *out)
 {
     for(int i = n; i > 1; i--) {
         for(int j = 0; j < i - 1; j++) {
-            if(out[j] > out[j + 1]) {
-                int tmp = out[j];
-                out[j] = out[j + 1];
-                out[j + 1] = tmp;
-            }   
+            if(out[j] > out[j + 1])
+                swap(out, j, j + 1);
         }
     }
 }
@@ -319,11 +333,8 @@ void gnomesort(int n, int *in, int *out)
         if(out[i] >= out[i - 1])
             i++;
         else {
-            // Swap.
-            int tmp = out[i];
-            out[i] = out[i - 1];
-            out[i - 1] = tmp;
-
+            swap(out, i, i - 1);
+            
             if(i > 1)
                 i--;
             else
@@ -338,10 +349,7 @@ void gnomesort_rewrite(int n, int *in, int *out)
     while(i < n) {
         i++;
         if(out[i] < out[i - 1]) {
-            // Swap.
-            int tmp = out[i];
-            out[i] = out[i - 1];
-            out[i - 1] = tmp;
+            swap(out, i, i - 1);
 
             if(i > 1)
                 i -= 2;
@@ -407,9 +415,7 @@ void combsort(int n, int *in, int *out)
         swapped = 0;
         for (int i = 0; gap + i < n; i++) {
             if (out[i] > out[i + gap]) {
-                int tmp = out[i];
-                out[i] = out[i + gap];
-                out[i + gap] = tmp;
+                swap(out, i, i + gap);
                 swapped = 1;
             }
         }
@@ -510,9 +516,7 @@ int quicksort_partition_helper(int n, int *out)
     int store_idx = 0;
     for(int i = 0; i <  n - 1; i++) {
         if(out[i] < pivot) {
-            int tmp = out[i];
-            out[i] = out[store_idx];
-            out[store_idx] = tmp;
+            swap(out, i, store_idx);
             store_idx++;
         }
     }
@@ -670,4 +674,63 @@ void quicksort_iterative_asm(int n, int *in, int *out)
         : "D"(out), "c"(n)
         : "flags", "memory", "%rax", "%rbx", "%rdx", "rsi"
     );
+}
+
+#ifndef DEBUG
+inline
+#endif
+void heapsort_siftdown_helper(int start, int end, int *out)
+{
+    int root = start;
+    
+    // While the root has at least one child.
+    while(root * 2 + 1 <= end) {
+        int child = root * 2 + 1;
+        int s = root;
+        
+        // Check if root is smaller than child.
+        if(out[s] < out[child])
+            s = child;
+        
+        // Check if right child exists, and if it's bigger than what we're currently swapping with.
+        if(child + 1 <= end && out[s] < out[child + 1])
+            s = child + 1;
+        
+        // Check if we need to swap at all.
+        if(s != root) {
+            swap(out, root, s);
+            root = s;
+        } else
+            // No swap? Done sifting down.
+            break;
+    }
+}
+
+#ifndef DEBUG
+inline
+#endif
+void heapsort_heapify_helper(int n, int *out)
+{
+    // Start is assigned the index in a of the last parent node.   
+    for(int start = (n - 2) / 2; start >= 0; start--) {
+        
+        // Sift down the node at index start to the proper place such that all nodes below
+        // the start index are in heap order.
+        heapsort_siftdown_helper(start, n - 1, out);
+
+    }
+}
+
+void heapsort(int n, int *in, int *out)
+{
+    // First place a in max-heap order
+    heapsort_heapify_helper(n, out);
+    
+    int end = n - 1;
+    while(end > 0) {
+        // Swap the root(maximum value) of the heap with the last element of the heap.
+        swap(out, 0, end);
+        end--;
+        heapsort_siftdown_helper(0, end, out);
+    }
 }
