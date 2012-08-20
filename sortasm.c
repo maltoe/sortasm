@@ -275,8 +275,6 @@ void bubblesort_asm(int n, int *in, int *out)
     __asm volatile (
             // Givens: ecx holds n, rdi holds out.
             // Initialization.
-            // rdx = 0; edx will hold j. 
-            "\n\t xor %%rdx, %%rdx"
 
             // if (i <= 1) goto exit;
             "\n\t cmpl $1, %%ecx"
@@ -285,23 +283,19 @@ void bubblesort_asm(int n, int *in, int *out)
             // i--;
             "\n\t subl $1,%%ecx"
 
-        // while(i > 1)
+        // while(i > 1) (always executed once!)
         "\n basm_outer_loop:"
             
             // j = 0
             "\n\t xorl %%edx, %%edx"     // j = 0 
 
-            // if(i == 0) continue;
-            "\n\t testl %%ecx, %%ecx"
-            "\n\t jle basm_inner_loop_exit"
-
-        // while(j < i - 1)
+        // while(j < i - 1) (always executed once!)
         "\n basm_inner_loop:"
             "\n\t movl (%%rdi, %%rdx, 4), %%eax"       // out[j]
             "\n\t movl 4(%%rdi, %%rdx, 4), %%ebx"      // out[j + 1]
             "\n\t cmpl %%ebx, %%eax"
-            "\n\t jle basm_no_swap"                          // out[j] <= out[j + 1] ?
-            "\n\t movl %%ebx, (%%rdi, %%rdx, 4)"        // out[j] = out[j + 1]
+            "\n\t jle basm_no_swap"                    // out[j] <= out[j + 1] ?
+            "\n\t movl %%ebx, (%%rdi, %%rdx, 4)"       // out[j] = out[j + 1]
             "\n\t movl %%eax, 4(%%rdi, %%rdx, 4)"      // out[j +1 ] = out[j]
         "\n basm_no_swap:"
             
@@ -723,7 +717,7 @@ void heapsort_heapify_helper(int n, int *out)
 
 void heapsort(int n, int *in, int *out)
 {
-    // First place a in max-heap order
+    // First place out in max-heap order.
     heapsort_heapify_helper(n, out);
     
     int end = n - 1;
