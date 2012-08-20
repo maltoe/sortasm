@@ -615,10 +615,10 @@ void quicksort_iterative_asm(int n, int *in, int *out)
             "\n\t jge qphasm_no_swap"
             
             // Swap.
-            "\n\t push %%rbx"
+            "\n\t mov %%rbx, %%r14"
             "\n\t movl (%%rdi, %%rsi, 4), %%ebx"
             "\n\t movl %%ebx, (%%rdi, %%rdx, 4)"
-            "\n\t pop %%rbx"
+            "\n\t mov %%r14, %%rbx"
             "\n\t movl %%ebx, (%%rdi, %%rsi, 4)"
             
             // store_idx++
