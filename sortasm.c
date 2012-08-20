@@ -55,8 +55,19 @@ const char* sort_func_names[] = {
 };
 
 /* ***************************************************************************
- * Main. Benchmarks.
+ * Main. Benchmarking.
  * ***************************************************************************/
+
+void usage()
+{
+    printf("Usage:\n");
+    printf("\t./test <alg> [num1, num2, num3, ...]\n");
+    printf("\nAlgorithms:\n");
+    for(int i = 0; i < num_sort_funcs; i++)
+        printf("\t[%d] %s\n", i, sort_func_names[i]);
+    printf("No numbers for benchmark.\n");
+    printf("No parameters for benchmarking all algorithms.\n");
+}
 
 void tim(sort_func sf, const char *name, int n, int *in, int *out) {
     struct timespec t1, t2;
@@ -68,43 +79,36 @@ void tim(sort_func sf, const char *name, int n, int *in, int *out) {
         (float) (t2.tv_nsec - t1.tv_nsec) / 1000000000);
 }
 
-void usage()
+void benchmark(int algn, int *algs)
 {
-    printf("Usage:\n");
-    printf("\t./test <alg> <num1> [num2, num3, ...]\n");
-    printf("\nAlgorithms:\n");
-    for(int i = 0; i < num_sort_funcs; i++)
-        printf("\t[%d] %s\n", i, sort_func_names[i]);
-    printf("No parameters for benchmark.\n");
+    const int n = 100000;
+    int list[n];
+    srand(time(NULL));
+    for(int i = 0; i < n; i++)
+        list[i] = rand();
+
+    int in[n];
+    int out[n];
+    for(int i = 0; i < algn; i++) {
+        int alg = algs[i];
+        
+        for(int i = 0; i < n; i++) {
+            in[i] = list[i];
+            out[i] = list[i];        
+        }
+        
+        tim(sort_funcs[alg], sort_func_names[alg], n, in, out);
+    }
 }
 
 void main(int argc, char **argv) 
 {
     if(argc == 1) {
-        // No args -> benchmark.
-        
-        const int n = 100000;
-        int list[n];
-        srand(time(NULL));
-        for(int i = 0; i < n; i++)
-            list[i] = rand();
-
-        int in[n];
-        int out[n];
-        
-        for(int alg = 0; alg < num_sort_funcs; alg++) {
-            for(int i = 0; i < n; i++) {
-                in[i] = list[i];
-                out[i] = list[i];        
-            }
-            tim(sort_funcs[alg], sort_func_names[alg], n, in, out);
-        }
-        
-        return;
-    }
-    
-    if(argc < 3) {
-        usage();
+        // Benchmark all algorithms.
+        int algs[num_sort_funcs];
+        for(int i = 0; i < num_sort_funcs; i++)
+            algs[i] = i;
+        benchmark(num_sort_funcs, algs);
         return;
     }
     
@@ -113,6 +117,15 @@ void main(int argc, char **argv)
         usage();
         return;
     }
+    
+    if(argc == 2) {
+        // Benchmark single algorithm.
+        int algs[] = { alg };
+        benchmark(1, algs);
+        return;
+    }
+    
+    // Otherwise: Run single algorithm with given data.
     
     int n = argc - 2;    
     int in[n], out[n];
@@ -574,10 +587,10 @@ void quicksort_iterative_asm(int n, int *in, int *out)
             "\n\t cmpl $1, %%ecx"
             "\n\t jle qiasm_load_remaining_from_stack"
             
-            // Save cur_n, cur_out, stack count.
-            "\n\t push %%rdx"
-            "\n\t push %%rcx"
-            "\n\t push %%rdi"
+            // Save cur_n, cur_out, stack count in unused registers.
+            "\n\t mov %%rdx, %%r11"
+            "\n\t mov %%rcx, %%r12"
+            "\n\t mov %%rdi, %%r13"
             
             // ###########################
             // The following code is the partition helper.
@@ -630,10 +643,10 @@ void quicksort_iterative_asm(int n, int *in, int *out)
             // ###########################
 
             // Now esi contains store_idx.
-            // Load old cur_n, cur_out and stack_count from stack.
-            "\n\t pop %%rdi"
-            "\n\t pop %%rcx"
-            "\n\t pop %%rdx"
+            // Load old cur_n, cur_out and stack_count.
+            "\n\t mov %%r13, %%rdi"
+            "\n\t mov %%r12, %%rcx"
+            "\n\t mov %%r11, %%rdx"
             
             // Save lower list part on stack.
             "\n\t push %%rsi"
