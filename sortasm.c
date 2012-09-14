@@ -84,7 +84,7 @@ void tim(sort_func sf, const char *name, int n, int *in, int *out) {
 
 void benchmark(int algn, int *algs)
 {
-    const int n = 100000;
+    const int n = 200000;
     int list[n];
     srand(time(NULL));
     for(int i = 0; i < n; i++)
