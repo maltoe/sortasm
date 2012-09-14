@@ -6,7 +6,7 @@
 
 Sample output (`-O2`, 200000 elements, Core i5):
 
-`
+<code>
 insertionsort : 15.312573 s.
 
 insertionsort_asm : 18.261358 s.
@@ -34,6 +34,7 @@ quicksort_iterative_asm : 0.016154 s.
 heapsort : 0.026895 s.
 
 heapsort_asm : 0.024864 s.
-`
+</code>
+
 
 
