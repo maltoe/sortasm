@@ -829,6 +829,10 @@ void heapsort_asm(int n, int *in, int *out)
 
         "\n hasm_main_siftdown_return:"
 
+            // Exit condition: end == 0
+            "\n\t testl %%ecx, %%ecx"
+            "\n\t je hasm_exit"
+
             "\n\t jmp hasm_main_loop"
 
             // End of main section.
@@ -905,6 +909,7 @@ void heapsort_asm(int n, int *in, int *out)
             // end of siftdown_helper
             // #######################
 
+        "\n hasm_exit:"
         : // no output
         : "D"(out), "c"(n)
         : "flags", "memory", "rax", "rbx", "rdx", "rsi", "r8", "r10", "r11", "r12"
