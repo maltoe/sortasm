@@ -95,9 +95,9 @@ void benchmark(int algn, int *algs)
     for(int i = 0; i < algn; i++) {
         int alg = algs[i];
         
-        for(int i = 0; i < n; i++) {
-            in[i] = list[i];
-            out[i] = list[i];        
+        for(int j = 0; j < n; j++) {
+            in[j] = list[j];
+            out[j] = list[j];        
         }
         
         tim(sort_funcs[alg], sort_func_names[alg], n, in, out);
