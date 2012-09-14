@@ -101,7 +101,7 @@ void benchmark(int algn, int *algs)
     }
 }
 
-void main(int argc, char **argv) 
+int main(int argc, char **argv) 
 {
     if(argc == 1) {
         // Benchmark all algorithms.
@@ -109,20 +109,20 @@ void main(int argc, char **argv)
         for(int i = 0; i < num_sort_funcs; i++)
             algs[i] = i;
         benchmark(num_sort_funcs, algs);
-        return;
+        return 0;
     }
     
     int alg;
     if((sscanf(argv[1], "%d", &alg) != 1) || (alg < 0) || (alg > num_sort_funcs - 1)) {
         usage();
-        return;
+        return 1;
     }
     
     if(argc == 2) {
         // Benchmark single algorithm.
         int algs[] = { alg };
         benchmark(1, algs);
-        return;
+        return 0;
     }
     
     // Otherwise: Run single algorithm with given data.
@@ -132,7 +132,7 @@ void main(int argc, char **argv)
     for(int i = 0; i < n; i++) {
         if(sscanf(argv[i + 2], "%d", &in[i]) != 1) {
             usage();
-            return;
+            return 1;
         }
         out[i] = in[i];
     }
@@ -142,6 +142,7 @@ void main(int argc, char **argv)
     for(int i = 0; i < n; i++)
         printf("%d ", out[i]);
     printf("\n");
+    return 0;
 }
 
 /* ***************************************************************************
@@ -164,7 +165,6 @@ void swap(int *arr, int i, int j)
 
 void insertionsort(int n, int *in, int *out)
 {
-    outerLoop:
     for(int i = 0; i < n; i++) {
         int inserted = 0;
         for(int j = 0; j < i; j++) {
@@ -275,6 +275,8 @@ void insertionsort_asm(int n, int *in, int *out)
 
 void bubblesort(int n, int *in, int *out)
 {
+    (void) in;
+
     for(int i = n; i > 1; i--) {
         for(int j = 0; j < i - 1; j++) {
             if(out[j] > out[j + 1])
@@ -285,6 +287,8 @@ void bubblesort(int n, int *in, int *out)
 
 void bubblesort_asm(int n, int *in, int *out)
 {
+    (void) in;
+
     __asm volatile (
             // Givens: ecx holds n, rdi holds out.
             // Initialization.
@@ -335,6 +339,8 @@ void bubblesort_asm(int n, int *in, int *out)
 
 void gnomesort(int n, int *in, int *out)
 {
+    (void) in;
+
     int i = 1;
     while(i < n) {
         if(out[i] >= out[i - 1])
@@ -352,6 +358,8 @@ void gnomesort(int n, int *in, int *out)
 
 void gnomesort_rewrite(int n, int *in, int *out)
 {
+    (void) in;
+
     int i = 0;
     while(i < n) {
         i++;
@@ -366,6 +374,8 @@ void gnomesort_rewrite(int n, int *in, int *out)
 
 void gnomesort_asm(int n, int *in, int *out)
 {
+    (void) in;
+
     __asm volatile (
             // i = 0
             "\n\t xor %%rdx, %%rdx"
@@ -412,6 +422,8 @@ void gnomesort_asm(int n, int *in, int *out)
 const float combsort_shrink_factor = 1.24733095F;
 void combsort(int n, int *in, int *out)
 {
+    (void) in;
+
     int gap = n;
     int swapped = 0;
 
@@ -431,6 +443,8 @@ void combsort(int n, int *in, int *out)
 
 void combsort_asm(int n, int *in, int *out)
 {
+    (void) in;
+
     __asm volatile (
             // We check the loop cond. at the bottom.
             // Thus, do an initial check here.
@@ -535,6 +549,8 @@ int quicksort_partition_helper(int n, int *out)
 
 void quicksort_recursive(int n, int *in, int *out)
 {
+    (void) in;
+
     if(n <= 1)
         return;
     
@@ -546,6 +562,8 @@ void quicksort_recursive(int n, int *in, int *out)
 
 void quicksort_iterative(int n, int *in, int *out)
 {
+    (void) in;
+
     int stack_count;
     int stack_n[n];
     int *stack_out[n];
@@ -575,6 +593,8 @@ void quicksort_iterative(int n, int *in, int *out)
 
 void quicksort_iterative_asm(int n, int *in, int *out)
 {
+    (void) in;
+
     __asm volatile (
             // int stack_count = 0;
             "\n\t xor %%rdx, %%rdx"
@@ -730,6 +750,8 @@ void heapsort_heapify_helper(int n, int *out)
 
 void heapsort(int n, int *in, int *out)
 {
+    (void) in;
+
     // First place out in max-heap order.
     heapsort_heapify_helper(n, out);
     
