@@ -699,7 +699,7 @@ void quicksort_iterative_asm(int n, int *in, int *out)
         "\n qiasm_exit:"
         : // no output
         : "D"(out), "c"(n)
-        : "flags", "memory", "%rax", "%rbx", "%rdx", "rsi"
+        : "flags", "memory", "rax", "rbx", "rdx", "rsi"
     );
 }
 
