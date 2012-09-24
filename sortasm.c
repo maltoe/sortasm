@@ -1,29 +1,34 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
+// Includes for aasort.
+#include <unistd.h>
+#include <smmintrin.h>
+
 /* ***************************************************************************
  * Prototypes & Algorithm registry.
  * ***************************************************************************/
+void insertionsort(uint32_t, uint32_t*, uint32_t*);
+void insertionsort_asm(uint32_t, uint32_t*, uint32_t*);
+void bubblesort(uint32_t, uint32_t*, uint32_t*);
+void bubblesort_asm(uint32_t, uint32_t*, uint32_t*);
+void gnomesort(uint32_t, uint32_t*, uint32_t*);
+void gnomesort_rewrite(uint32_t, uint32_t*, uint32_t*);
+void gnomesort_asm(uint32_t, uint32_t*, uint32_t*);
+void combsort(uint32_t, uint32_t*, uint32_t*);
+void combsort_asm(uint32_t, uint32_t*, uint32_t*);
+void quicksort_recursive(uint32_t, uint32_t*, uint32_t*);
+void quicksort_iterative(uint32_t, uint32_t*, uint32_t*);
+void quicksort_iterative_asm(uint32_t, uint32_t*, uint32_t*);
+void heapsort(uint32_t, uint32_t*, uint32_t*);
+void heapsort_asm(uint32_t, uint32_t*, uint32_t*);
+void aasort(uint32_t, uint32_t*, uint32_t*);
 
-void insertionsort(int, int*, int*);
-void insertionsort_asm(int, int*, int*);
-void bubblesort(int, int*, int*);
-void bubblesort_asm(int, int*, int*);
-void gnomesort(int, int*, int*);
-void gnomesort_rewrite(int, int*, int*);
-void gnomesort_asm(int, int*, int*);
-void combsort(int, int*, int*);
-void combsort_asm(int, int*, int*);
-void quicksort_recursive(int, int*, int*);
-void quicksort_iterative(int, int*, int*);
-void quicksort_iterative_asm(int, int*, int*);
-void heapsort(int, int*, int*);
-void heapsort_asm(int, int*, int*);
+typedef void (*sort_func)(uint32_t, uint32_t*, uint32_t*);
 
-typedef void (*sort_func)(int, int*, int*);
-
-const int num_sort_funcs = 14;
+const uint32_t num_sort_funcs = 15;
 const sort_func sort_funcs[]= {
     insertionsort,
     insertionsort_asm,
@@ -38,7 +43,8 @@ const sort_func sort_funcs[]= {
     quicksort_iterative,
     quicksort_iterative_asm,
     heapsort,
-    heapsort_asm
+    heapsort_asm,
+    aasort
 };
 const char* sort_func_names[] = {
     "insertionsort",
@@ -54,7 +60,8 @@ const char* sort_func_names[] = {
     "quicksort_iterative",
     "quicksort_iterative_asm",
     "heapsort",
-    "heapsort_asm"
+    "heapsort_asm",
+    "aasort"
 };
 
 /* ***************************************************************************
@@ -64,7 +71,7 @@ const char* sort_func_names[] = {
 void usage()
 {
     printf("Usage:\n");
-    printf("\t./test <alg> [num1, num2, num3, ...]\n");
+    printf("\t./sortasm <alg> [num1, num2, num3, ...]\n");
     printf("\nAlgorithms:\n");
     for(int i = 0; i < num_sort_funcs; i++)
         printf("\t[%d] %s\n", i, sort_func_names[i]);
@@ -72,7 +79,7 @@ void usage()
     printf("No parameters for benchmarking all algorithms.\n");
 }
 
-void tim(sort_func sf, const char *name, int n, int *in, int *out) {
+void tim(sort_func sf, const char *name, uint32_t n, uint32_t *in, uint32_t *out) {
     struct timespec t1, t2;
     clock_gettime(CLOCK_REALTIME, &t1);
     sf(n, in, out);
@@ -82,20 +89,21 @@ void tim(sort_func sf, const char *name, int n, int *in, int *out) {
         (float) (t2.tv_nsec - t1.tv_nsec) / 1000000000);
 }
 
-void benchmark(int algn, int *algs)
+void benchmark(uint32_t algn, uint32_t *algs)
 {
-    const int n = 200000;
-    int list[n];
+    // NOTE: n needs to be dividable by 16 for aasort.
+    const uint32_t n = 200000;
+    uint32_t list[n];
     srand(time(NULL));
-    for(int i = 0; i < n; i++)
+    for(uint32_t i = 0; i < n; i++)
         list[i] = rand();
 
-    int in[n];
-    int out[n];
-    for(int i = 0; i < algn; i++) {
-        int alg = algs[i];
+    uint32_t in[n] __attribute__((aligned(16)));
+    uint32_t out[n] __attribute__((aligned(16)));
+    for(uint32_t i = 0; i < algn; i++) {
+        uint32_t alg = algs[i];
         
-        for(int j = 0; j < n; j++) {
+        for(uint32_t j = 0; j < n; j++) {
             in[j] = list[j];
             out[j] = list[j];        
         }
@@ -108,32 +116,32 @@ int main(int argc, char **argv)
 {
     if(argc == 1) {
         // Benchmark all algorithms.
-        int algs[num_sort_funcs];
-        for(int i = 0; i < num_sort_funcs; i++)
+        uint32_t algs[num_sort_funcs];
+        for(uint32_t i = 0; i < num_sort_funcs; i++)
             algs[i] = i;
         benchmark(num_sort_funcs, algs);
         return 0;
     }
     
-    int alg;
-    if((sscanf(argv[1], "%d", &alg) != 1) || (alg < 0) || (alg > num_sort_funcs - 1)) {
+    uint32_t alg;
+    if((sscanf(argv[1], "%i", &alg) != 1) || (alg < 0) || (alg > num_sort_funcs - 1)) {
         usage();
         return 1;
     }
     
     if(argc == 2) {
         // Benchmark single algorithm.
-        int algs[] = { alg };
+        uint32_t algs[] = { alg };
         benchmark(1, algs);
         return 0;
     }
     
     // Otherwise: Run single algorithm with given data.
     
-    int n = argc - 2;    
-    int in[n], out[n];
-    for(int i = 0; i < n; i++) {
-        if(sscanf(argv[i + 2], "%d", &in[i]) != 1) {
+    uint32_t n = argc - 2;    
+    uint32_t in[n], out[n];
+    for(uint32_t i = 0; i < n; i++) {
+        if(sscanf(argv[i + 2], "%u", &in[i]) != 1) {
             usage();
             return 1;
         }
@@ -142,8 +150,8 @@ int main(int argc, char **argv)
     
     sort_funcs[alg](n, in, out);
     
-    for(int i = 0; i < n; i++)
-        printf("%d ", out[i]);
+    for(uint32_t i = 0; i < n; i++)
+        printf("%u ", out[i]);
     printf("\n");
     return 0;
 }
@@ -155,25 +163,33 @@ int main(int argc, char **argv)
 #ifndef DEBUG
 inline
 #endif
-void swap(int *arr, int i, int j)
+void swap(uint32_t *arr, uint32_t i, uint32_t j)
 {
-    int tmp = arr[i];
+    uint32_t tmp = arr[i];
     arr[i] = arr[j];
     arr[j] = tmp;
+}
+
+#ifndef DEBUG
+inline
+#endif
+uint32_t min(uint32_t a, uint32_t b)
+{
+    return a < b ? a : b;
 }
 
 /* ***************************************************************************
  * Sorting algorithms.
  * ***************************************************************************/
 
-void insertionsort(int n, int *in, int *out)
+void insertionsort(uint32_t n, uint32_t *in, uint32_t *out)
 {
     for(int i = 0; i < n; i++) {
         int inserted = 0;
         for(int j = 0; j < i; j++) {
             if(in[i] < out[j]) {
                 // Move & insert.
-                for(int k = i - 1; k >= j; k--)
+                for(int k = (int) i - 1; k >= j; k--)
                     out[k + 1] = out[k];
                 out[j] = in[i];
                 inserted = 1;
@@ -185,7 +201,7 @@ void insertionsort(int n, int *in, int *out)
     }
 }
 
-void insertionsort_asm(int n, int *in, int *out)
+void insertionsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     __asm volatile (
             // i = 0
@@ -276,19 +292,19 @@ void insertionsort_asm(int n, int *in, int *out)
     );
 }
 
-void bubblesort(int n, int *in, int *out)
+void bubblesort(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
-    for(int i = n; i > 1; i--) {
-        for(int j = 0; j < i - 1; j++) {
+    for(uint32_t i = n; i > 1; i--) {
+        for(uint32_t j = 0; j < i - 1; j++) {
             if(out[j] > out[j + 1])
                 swap(out, j, j + 1);
         }
     }
 }
 
-void bubblesort_asm(int n, int *in, int *out)
+void bubblesort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
@@ -340,11 +356,11 @@ void bubblesort_asm(int n, int *in, int *out)
     );
 }
 
-void gnomesort(int n, int *in, int *out)
+void gnomesort(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
-    int i = 1;
+    uint32_t i = 1;
     while(i < n) {
         if(out[i] >= out[i - 1])
             i++;
@@ -359,11 +375,11 @@ void gnomesort(int n, int *in, int *out)
     }
 }
 
-void gnomesort_rewrite(int n, int *in, int *out)
+void gnomesort_rewrite(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
-    int i = 0;
+    uint32_t i = 0;
     while(i < n) {
         i++;
         if(out[i] < out[i - 1]) {
@@ -375,7 +391,7 @@ void gnomesort_rewrite(int n, int *in, int *out)
     }
 }
 
-void gnomesort_asm(int n, int *in, int *out)
+void gnomesort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
@@ -423,19 +439,19 @@ void gnomesort_asm(int n, int *in, int *out)
 }
 
 const float combsort_shrink_factor = 1.24733095F;
-void combsort(int n, int *in, int *out)
+void combsort(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
-    int gap = n;
-    int swapped = 0;
+    uint32_t gap = n;
+    uint32_t swapped = 0;
 
     while((gap > 1) || swapped) {
         if(gap > 1)
-            gap = (int) ((double) gap / combsort_shrink_factor);
+            gap = (uint32_t) ((double) gap / combsort_shrink_factor);
          
         swapped = 0;
-        for (int i = 0; gap + i < n; i++) {
+        for (uint32_t i = 0; gap + i < n; i++) {
             if (out[i] > out[i + gap]) {
                 swap(out, i, i + gap);
                 swapped = 1;
@@ -444,7 +460,7 @@ void combsort(int n, int *in, int *out)
     }
 }
 
-void combsort_asm(int n, int *in, int *out)
+void combsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
@@ -454,7 +470,7 @@ void combsort_asm(int n, int *in, int *out)
             "\n\t cmpl $1, %%ecx"
             "\n\t jle casm_exit"
         
-            // int gap = n;
+            // uint32_t gap = n;
             "\n\t movl %%ecx, %%edx"
             // Load static shrink_factor into xmm2.
             "\n\t movss combsort_shrink_factor, %%xmm2"
@@ -474,7 +490,7 @@ void combsort_asm(int n, int *in, int *out)
         
             // swapped = 0;
             "\n\t xorps %%xmm0, %%xmm0"
-            // int i = 0;
+            // uint32_t i = 0;
             "\n\t xor %%rsi, %%rsi"
             
         "\n casm_inner_loop:"
@@ -534,11 +550,11 @@ void combsort_asm(int n, int *in, int *out)
 #ifndef DEBUG
 inline 
 #endif
-int quicksort_partition_helper(int n, int *out)
+uint32_t quicksort_partition_helper(uint32_t n, uint32_t *out)
 {
-    int pivot = out[n - 1];
-    int store_idx = 0;
-    for(int i = 0; i <  n - 1; i++) {
+    uint32_t pivot = out[n - 1];
+    uint32_t store_idx = 0;
+    for(uint32_t i = 0; i <  n - 1; i++) {
         if(out[i] < pivot) {
             swap(out, i, store_idx);
             store_idx++;
@@ -550,40 +566,40 @@ int quicksort_partition_helper(int n, int *out)
     return store_idx;
 }
 
-void quicksort_recursive(int n, int *in, int *out)
+void quicksort_recursive(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
     if(n <= 1)
         return;
     
-    int store_idx = quicksort_partition_helper(n, out);
+    uint32_t store_idx = quicksort_partition_helper(n, out);
     
     quicksort_recursive(store_idx, NULL, out);
     quicksort_recursive(n - store_idx - 1, NULL, &out[store_idx + 1]);
 }
 
-void quicksort_iterative(int n, int *in, int *out)
+void quicksort_iterative(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
-    int stack_count;
-    int stack_n[n];
-    int *stack_out[n];
+    uint32_t stack_count;
+    uint32_t stack_n[n];
+    uint32_t *stack_out[n];
     
     stack_count = 1;
     stack_n[0] = n;
     stack_out[0] = out;
     
     while(stack_count > 0) {
-        int cur_n = stack_n[stack_count - 1];
-        int *cur_out = stack_out[stack_count - 1];
+        uint32_t cur_n = stack_n[stack_count - 1];
+        uint32_t *cur_out = stack_out[stack_count - 1];
         stack_count--;
         
         if(cur_n <= 1)
             continue;
         
-        int store_idx = quicksort_partition_helper(cur_n, cur_out);
+        uint32_t store_idx = quicksort_partition_helper(cur_n, cur_out);
         
         stack_n[stack_count] = store_idx;
         stack_out[stack_count] = cur_out;
@@ -594,12 +610,12 @@ void quicksort_iterative(int n, int *in, int *out)
     }
 }
 
-void quicksort_iterative_asm(int n, int *in, int *out)
+void quicksort_iterative_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
     __asm volatile (
-            // int stack_count = 0;
+            // uint32_t stack_count = 0;
             "\n\t xor %%rdx, %%rdx"
                         
         "\n qiasm_loop:"
@@ -620,11 +636,11 @@ void quicksort_iterative_asm(int n, int *in, int *out)
         
             // Decrement n as we only need it in (n - 1) fashion.
             "\n\t subl $1, %%ecx"
-            // int pivot = out[n - 1] --> eax.
+            // uint32_t pivot = out[n - 1] --> eax.
             "\n\t movl (%%rdi, %%rcx, 4), %%eax"
-            // int i = 0 --> edx
+            // uint32_t i = 0 --> edx
             "\n\t xor %%rdx, %%rdx"
-            // int store_idx = 0 --> esi
+            // uint32_t store_idx = 0 --> esi
             "\n\t xor %%rsi, %%rsi"
             
             // Note that we assume that we never get called with n == 1,
@@ -709,7 +725,7 @@ void quicksort_iterative_asm(int n, int *in, int *out)
 #ifndef DEBUG
 inline
 #endif
-void heapsort_siftdown_helper(int start, int end, int *out)
+void heapsort_siftdown_helper(int start, int end, uint32_t *out)
 {
     int root = start;
     
@@ -739,26 +755,26 @@ void heapsort_siftdown_helper(int start, int end, int *out)
 #ifndef DEBUG
 inline
 #endif
-void heapsort_heapify_helper(int n, int *out)
+void heapsort_heapify_helper(uint32_t n, uint32_t *out)
 {
     // Start is assigned the index in a of the last parent node.   
-    for(int start = (n - 2) / 2; start >= 0; start--) {
+    for(int start = (int) (n - 2) / 2; start >= 0; start--) {
         
         // Sift down the node at index start to the proper place such that all nodes below
         // the start index are in heap order.
-        heapsort_siftdown_helper(start, n - 1, out);
+        heapsort_siftdown_helper(start, (int) n - 1, out);
 
     }
 }
 
-void heapsort(int n, int *in, int *out)
+void heapsort(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
     // First place out in max-heap order.
     heapsort_heapify_helper(n, out);
     
-    int end = n - 1;
+    int end = (int) n - 1;
     while(end > 0) {
         // Swap the root(maximum value) of the heap with the last element of the heap.
         swap(out, 0, end);
@@ -767,7 +783,7 @@ void heapsort(int n, int *in, int *out)
     }
 }
 
-void heapsort_asm(int n, int *in, int *out)
+void heapsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
@@ -914,4 +930,90 @@ void heapsort_asm(int n, int *in, int *out)
         : "D"(out), "c"(n)
         : "flags", "memory", "rax", "rbx", "rdx", "rsi", "r8", "r10", "r11", "r12"
     );
+}
+
+/*
+ * aasort implemented after paper
+ * "AA-Sort: A New Parallel Sorting Algorithm for Multi-Core SIMD Processors"
+ * by H. Inoue et al.
+ * See: www.trl.ibm.com/people/inouehrs/pdf/PACT2007-SIMDsort.pdf
+ *
+ * Conversely to the paper, we do not use thread-level concurrency.
+ *
+ * NOTE: We expect the number of data elements to be dividable by 16!
+ *
+ * Some inspiration found here:
+ * https://github.com/herumi/opti/blob/master/intsort.hpp
+ */
+
+inline void aasort_vector_cmpswap()
+{
+
+}
+
+inline void aasort_vector_cmpswap_skew()
+{
+
+}
+
+void aasort_in_core(uint32_t n, __m128i *out)
+{
+    /*
+     * (1) Sort values within each vector in ascending order.
+     *
+     * NOTE: Although not explicitly stated in the paper,
+     * efficient data-parallel sorting requires to rearrange
+     * the data of 4 vectors, i.e., sort the first elements
+     * in one vector, the second elements in the next, and so on.
+     */
+
+     for(uint32_t i = 0; i < n; i += 4) {
+        __m128i t[4];
+        __m128i *x = &out[i];
+        t[0] = _mm_min_epu32(x[0], x[1]);
+        t[1] = _mm_max_epu32(x[0], x[1]);
+        t[2] = _mm_min_epu32(x[2], x[3]);
+        t[3] = _mm_max_epu32(x[2], x[3]);
+        x[0] = _mm_min_epu32(t[0], t[2]);
+        x[3] = _mm_max_epu32(t[1], t[3]);
+        t[0] = _mm_max_epu32(t[0], t[2]);
+        t[1] = _mm_min_epu32(t[1], t[3]);
+        x[1] = _mm_min_epu32(t[0], t[1]);
+        x[2] = _mm_max_epu32(t[0], t[1]);
+
+        __m128 *tf = (__m128*) t;
+        __m128 *xf = (__m128*) x;
+        tf[0] = _mm_unpacklo_ps(xf[0], xf[2]);
+        tf[1] = _mm_unpacklo_ps(xf[1], xf[3]);
+        tf[2] = _mm_unpackhi_ps(xf[0], xf[2]);
+        tf[3] = _mm_unpackhi_ps(xf[1], xf[3]);
+        xf[0] = _mm_unpacklo_ps(tf[0], tf[1]);
+        xf[1] = _mm_unpackhi_ps(tf[0], tf[1]);
+        xf[2] = _mm_unpacklo_ps(tf[2], tf[3]);
+        xf[3] = _mm_unpackhi_ps(tf[2], tf[3]);
+     }
+
+}
+
+void aasort_out_of_core()
+{
+
+}
+
+void aasort(uint32_t n, uint32_t *in, uint32_t *out)
+{
+    /*
+     * (1) Divide all of the data to be sorted into blocks that
+     * fit in the cache or the local memory of the processor.
+     */
+
+    // As stated in the paper, we use half the L2 cache as block size.
+    uint32_t l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
+    uint32_t block_size = l2_cache / 2;
+    uint32_t block_elements = block_size / 4; 
+
+    for(uint32_t i = 0; i < n; i += block_elements) {
+        uint32_t k = min(n - i, block_elements);
+        aasort_in_core(k, (__m128i*) &out[i]);
+    }
 }
