@@ -1,2 +1,4 @@
 sortasm
 sortasm.s
+*.kdev4
+*~
