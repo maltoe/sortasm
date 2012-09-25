@@ -4,6 +4,7 @@
 #include <time.h>
 
 // Includes for aasort.
+#include <string.h>
 #include <unistd.h>
 #include <smmintrin.h>
 
@@ -79,6 +80,13 @@ void usage()
     printf("No parameters for benchmarking all algorithms.\n");
 }
 
+void print_arr(uint32_t n, uint32_t *arr)
+{
+    for(uint32_t i = 0; i < n; i++)
+        printf("%u ", arr[i]);       
+    printf("\n");
+}
+
 void tim(sort_func sf, const char *name, uint32_t n, uint32_t *in, uint32_t *out) {
     struct timespec t1, t2;
     clock_gettime(CLOCK_REALTIME, &t1);
@@ -89,17 +97,28 @@ void tim(sort_func sf, const char *name, uint32_t n, uint32_t *in, uint32_t *out
         (float) (t2.tv_nsec - t1.tv_nsec) / 1000000000);
 }
 
+void verify_results(uint32_t n, uint32_t *out)
+{
+    for(uint32_t j = 0; j < n - 1; j++) {
+        if(out[j] > out[j + 1]) {
+            printf("Resulting array is not sorted!!\n");
+            break;
+        }
+    }    
+}
+
 void benchmark(uint32_t algn, uint32_t *algs)
 {
     // NOTE: n needs to be dividable by 16 for aasort.
-    const uint32_t n = 200000;
-    uint32_t list[n];
+    const uint32_t n = 640000;
+
+    uint32_t *list = valloc(4 * n);
     srand(time(NULL));
     for(uint32_t i = 0; i < n; i++)
         list[i] = rand();
 
-    uint32_t in[n] __attribute__((aligned(16)));
-    uint32_t out[n] __attribute__((aligned(16)));
+    uint32_t *in = valloc(4 * n);
+    uint32_t *out = valloc(4 * n);
     for(uint32_t i = 0; i < algn; i++) {
         uint32_t alg = algs[i];
         
@@ -109,18 +128,12 @@ void benchmark(uint32_t algn, uint32_t *algs)
         }
         
         tim(sort_funcs[alg], sort_func_names[alg], n, in, out);
+        verify_results(n, out);
     }
-}
 
-void print_arr(uint32_t n, uint32_t *arr)
-{
-    for(uint32_t i = 0; i < n; i++) {
-        if(i % 4 == 0)
-            printf(" ");
-        printf("%u ", arr[i]);
-    }
-        
-    printf("\n");
+    free(list);
+    free(in);
+    free(out);
 }
 
 int main(int argc, char **argv) 
@@ -160,7 +173,7 @@ int main(int argc, char **argv)
     }
     
     sort_funcs[alg](n, in, out);
-    
+    verify_results(n, out);
     print_arr(n, out);
 
     return 0;
@@ -1091,9 +1104,62 @@ uint32_t aasort_in_core(uint32_t n, __m128i *in, __m128i *out)
     return 1;
 }
 
-void aasort_out_of_core()
-{
+typedef union {
+    __m128i v;
+    uint32_t i[4];
+} m128i_u;
 
+void aasort_vector_merge(m128i_u *a, m128i_u *b)
+{
+    uint32_t o[8];
+    uint32_t ap = 0, bp = 0, op = 0;
+    while(ap < 4 && bp < 4) {
+        if((*a).i[ap] < (*b).i[bp])
+            o[op++] = (*a).i[ap++];
+        else 
+            o[op++] = (*b).i[bp++];
+    }
+
+    while(ap < 4)
+        o[op++] = (*a).i[ap++];
+
+    while(bp < 4)
+        o[op++] = (*b).i[bp++];
+
+    (*a).v = _mm_load_si128((__m128i*) &o[0]);
+    (*b).v = _mm_load_si128((__m128i*) &o[4]);
+}
+
+void aasort_out_of_core(uint32_t an, __m128i *a, uint32_t bn, __m128i *b, __m128i *out)
+{
+    uint32_t ap = 0, bp = 0, op = 0;
+    
+    __m128i vmin = a[ap++];
+    __m128i vmax = b[bp++];
+    while(ap < (an / 4) && bp < (bn / 4)) { 
+        aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax); 
+        out[op++] = vmin;
+        if(_mm_extract_epi32(a[ap], 0) < _mm_extract_epi32(b[bp], 0))
+            vmin = a[ap++];
+        else
+            vmin = b[bp++];
+    }
+
+    if(ap < (an / 4)) {
+        while(ap < (an / 4)) {
+            vmin = a[ap++];
+            aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+            out[op++] = vmin;
+        }
+    } else if(bp < (bn / 4)) {
+        while(bp < (bn / 4)) {
+            vmin = b[bp++];
+            aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+            out[op++] = vmin;
+        }
+    }
+
+    out[op] = vmax;
 }
 
 void aasort(uint32_t n, uint32_t *in, uint32_t *out)
@@ -1123,5 +1189,38 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
      * (3) Merge the sorted blocks with the out-of-core sorting algorithm.
      */
 
+    int currently_in_out = 1;
+    uint32_t *tin = in;
+    uint32_t *tout = out;
 
+    printf("Is it? %u, %u, %u\n", block_elements < n, block_elements, n);
+    while(block_elements < n) {
+        printf("%u\n", block_elements);
+        for(uint32_t i = 0; i < n; i += block_elements * 2) {
+            if(n - i <= block_elements) {
+                // Last block? Copy.
+                memcpy(&tout[i], &tin[i], (n - i) * 4);
+            } else {
+                // Merge two blocks.
+                printf("%u %u\n", i, i + block_elements);
+                uint32_t k = min(n - (i + block_elements), block_elements);
+                aasort_out_of_core(block_elements, (__m128i*) &tin[i], k, (__m128i*) &tin[i + block_elements], (__m128i*) &tout[i]);
+            }
+        }
+
+        block_elements *= 2;
+
+        if(currently_in_out) {
+            tin = out;
+            tout = in;
+        } else {
+            tin = in;
+            tout = out;
+        }
+        currently_in_out = !currently_in_out;
+    }
+
+    if(!currently_in_out) {
+        memcpy(out, in, n * 4);
+    }
 }
