@@ -1277,8 +1277,7 @@ int main(int argc, char **argv)
             } 
             break;
         case 'n':
-            if((sscanf(optarg, "%u", &n) != 1) 
-                || (n % 16 != 0)) {
+            if(sscanf(optarg, "%u", &n) != 1) {
                 usage(argv[0]);
                 return 1;            
             }
