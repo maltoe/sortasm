@@ -4,7 +4,7 @@ CFLAGS=$(CFLAGS_COMMON) -O0 -g -ggdb -DDEBUG
 else
 CFLAGS=$(CFLAGS_COMMON) -O2
 endif
-LDFLAGS=-lrt
+LDFLAGS=-lrt -lm
 
 sortasm: sortasm.c
 	gcc $(CFLAGS) $(LDFLAGS) sortasm.c -o sortasm

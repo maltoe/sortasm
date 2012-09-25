@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -110,7 +111,7 @@ void verify_results(uint32_t n, uint32_t *out)
 void benchmark(uint32_t algn, uint32_t *algs)
 {
     // NOTE: n needs to be dividable by 16 for aasort.
-    const uint32_t n = 640000;
+    const uint32_t n = 6400000;
 
     uint32_t *list = valloc(4 * n);
     srand(time(NULL));
@@ -606,9 +607,10 @@ void quicksort_iterative(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
 
+    const uint32_t max_stack_size = ((int) log(n)/log(2)) + 1;
     uint32_t stack_count;
-    uint32_t stack_n[n];
-    uint32_t *stack_out[n];
+    uint32_t *stack_n = malloc(4 * max_stack_size);
+    uint32_t **stack_out = malloc(sizeof(uint32_t*) * max_stack_size);
     
     stack_count = 1;
     stack_n[0] = n;
@@ -624,13 +626,28 @@ void quicksort_iterative(uint32_t n, uint32_t *in, uint32_t *out)
         
         uint32_t store_idx = quicksort_partition_helper(cur_n, cur_out);
         
-        stack_n[stack_count] = store_idx;
-        stack_out[stack_count] = cur_out;
-        stack_count++;
-        stack_n[stack_count] = cur_n - store_idx - 1;
-        stack_out[stack_count] = &cur_out[store_idx + 1];
-        stack_count++;
+        // Continue with the smaller part (i.e., push it onto stack last).
+        // This way we can ensure that the stack size will not exceed log2(n).
+        // See: http://stackoverflow.com/questions/6709055/quicksort-stack-size
+        if(store_idx <= cur_n / 2) {
+            stack_n[stack_count] = cur_n - store_idx - 1;
+            stack_out[stack_count] = &cur_out[store_idx + 1];
+            stack_count++;
+            stack_n[stack_count] = store_idx;
+            stack_out[stack_count] = cur_out;
+            stack_count++;
+        } else {
+            stack_n[stack_count] = store_idx;
+            stack_out[stack_count] = cur_out;
+            stack_count++;
+            stack_n[stack_count] = cur_n - store_idx - 1;
+            stack_out[stack_count] = &cur_out[store_idx + 1];
+            stack_count++;
+        }
     }
+
+    free(stack_n);
+    free(stack_out);
 }
 
 void quicksort_iterative_asm(uint32_t n, uint32_t *in, uint32_t *out)
@@ -1173,6 +1190,10 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
     uint32_t l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
     uint32_t block_size = l2_cache / 2;
     uint32_t block_elements = block_size / 4; 
+
+    printf("L2: %u\n", l2_cache);
+    printf("Blocksize: %u\n", block_size);
+    printf("Blockelements: %u\n", block_elements);
 
     for(uint32_t i = 0; i < n; i += block_elements) {
         uint32_t k = min(n - i, block_elements);
