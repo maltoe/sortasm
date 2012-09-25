@@ -112,6 +112,17 @@ void benchmark(uint32_t algn, uint32_t *algs)
     }
 }
 
+void print_arr(uint32_t n, uint32_t *arr)
+{
+    for(uint32_t i = 0; i < n; i++) {
+        if(i % 4 == 0)
+            printf(" ");
+        printf("%u ", arr[i]);
+    }
+        
+    printf("\n");
+}
+
 int main(int argc, char **argv) 
 {
     if(argc == 1) {
@@ -150,9 +161,8 @@ int main(int argc, char **argv)
     
     sort_funcs[alg](n, in, out);
     
-    for(uint32_t i = 0; i < n; i++)
-        printf("%u ", out[i]);
-    printf("\n");
+    print_arr(n, out);
+
     return 0;
 }
 
@@ -933,30 +943,73 @@ void heapsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 }
 
 /*
- * aasort implemented after paper
+ * aasort implemented following instructions in paper
  * "AA-Sort: A New Parallel Sorting Algorithm for Multi-Core SIMD Processors"
  * by H. Inoue et al.
  * See: www.trl.ibm.com/people/inouehrs/pdf/PACT2007-SIMDsort.pdf
+ *
+ * An earlier, non published version, which provides some more detail especially
+ * regarding in-core step 2, can be found here:
+ * http://www.research.ibm.com/trl/people/inouehrs/pdf/SPE-SIMDsort.pdf
  *
  * Conversely to the paper, we do not use thread-level concurrency.
  *
  * NOTE: We expect the number of data elements to be dividable by 16!
  *
- * Some inspiration found here:
+ * Large portions of the code adapted from here:
  * https://github.com/herumi/opti/blob/master/intsort.hpp
  */
 
-inline void aasort_vector_cmpswap()
-{
-
+#ifndef DEBUG
+inline
+#endif
+void aasort_vector_transpose(__m128 *xf) {
+    __m128 tf[4];
+    tf[0] = _mm_unpacklo_ps(xf[0], xf[2]);
+    tf[1] = _mm_unpacklo_ps(xf[1], xf[3]);
+    tf[2] = _mm_unpackhi_ps(xf[0], xf[2]);
+    tf[3] = _mm_unpackhi_ps(xf[1], xf[3]);
+    xf[0] = _mm_unpacklo_ps(tf[0], tf[1]);
+    xf[1] = _mm_unpackhi_ps(tf[0], tf[1]);
+    xf[2] = _mm_unpacklo_ps(tf[2], tf[3]);
+    xf[3] = _mm_unpackhi_ps(tf[2], tf[3]);
 }
 
-inline void aasort_vector_cmpswap_skew()
+#ifndef DEBUG
+inline
+#endif
+void aasort_vector_cmpswap(__m128i *in, int i, int j)
 {
-
+    __m128i t = _mm_min_epu32(in[i], in[j]);
+    in[j] = _mm_max_epu32(in[i], in[j]);
+    in[i] = t;
 }
 
-void aasort_in_core(uint32_t n, __m128i *out)
+#ifndef DEBUG
+inline
+#endif
+void aasort_vector_cmpswap_skew(__m128i *in, int i, int j)
+{
+    __m128i x = _mm_slli_si128(in[i], 4);
+    __m128i y = _mm_min_epu32(in[j], x);
+    in[j] = _mm_max_epu32(in[j], x);
+    in[i] = _mm_srli_si128(in[i], 12);
+    in[i] = _mm_alignr_epi8(in[i], y, 4);
+}
+
+#ifndef DEBUG
+inline
+#endif
+uint32_t aasort_is_sorted(uint32_t n, __m128i *in)
+{
+    uint32_t r = 1;
+    for(uint32_t i = 0; r && i < (n / 4) - 1; i++)
+        r &= _mm_testc_si128(in[i + 1], _mm_max_epu32(in[i], in[i + 1]));
+    return r;
+}
+
+const float aasort_shrink_factor = 1.28f;
+uint32_t aasort_in_core(uint32_t n, __m128i *in, __m128i *out)
 {
     /*
      * (1) Sort values within each vector in ascending order.
@@ -967,9 +1020,9 @@ void aasort_in_core(uint32_t n, __m128i *out)
      * in one vector, the second elements in the next, and so on.
      */
 
-     for(uint32_t i = 0; i < n; i += 4) {
+    for(uint32_t i = 0; i < n / 4; i += 4) {
         __m128i t[4];
-        __m128i *x = &out[i];
+        __m128i *x = &in[i];
         t[0] = _mm_min_epu32(x[0], x[1]);
         t[1] = _mm_max_epu32(x[0], x[1]);
         t[2] = _mm_min_epu32(x[2], x[3]);
@@ -981,18 +1034,61 @@ void aasort_in_core(uint32_t n, __m128i *out)
         x[1] = _mm_min_epu32(t[0], t[1]);
         x[2] = _mm_max_epu32(t[0], t[1]);
 
-        __m128 *tf = (__m128*) t;
-        __m128 *xf = (__m128*) x;
-        tf[0] = _mm_unpacklo_ps(xf[0], xf[2]);
-        tf[1] = _mm_unpacklo_ps(xf[1], xf[3]);
-        tf[2] = _mm_unpackhi_ps(xf[0], xf[2]);
-        tf[3] = _mm_unpackhi_ps(xf[1], xf[3]);
-        xf[0] = _mm_unpacklo_ps(tf[0], tf[1]);
-        xf[1] = _mm_unpackhi_ps(tf[0], tf[1]);
-        xf[2] = _mm_unpacklo_ps(tf[2], tf[3]);
-        xf[3] = _mm_unpackhi_ps(tf[2], tf[3]);
-     }
+        aasort_vector_transpose((__m128*) x);
+    }
 
+    /*
+     * (2) Execute combsort to sort the values into the transposed order.
+     */
+    
+    uint32_t gap = (int) ((n / 4) / aasort_shrink_factor);
+    while(gap > 1) {
+
+        for(int i = 0; i < ((n / 4) - gap); i++)
+            aasort_vector_cmpswap(in, i, i + gap);
+
+        for(int i = ((n / 4) - gap); i < n / 4; i++)
+            aasort_vector_cmpswap_skew(in, i, i + gap - (n / 4));
+
+        gap /= aasort_shrink_factor;
+    }
+
+    /*
+     * As with combsort, bubblesort is executed at the end to make sure the array
+     * is sorted. However, in the pre-version of the paper the authors state that
+     * they have limited the number of bubblesort iterations to 10 and would fallback
+     * to a vectorized merge sort if that limit would ever be reached. Here, we simply
+     * output a warning and stop the execution.
+     */
+
+    uint32_t loop_count = 0;
+    do {
+        for(uint32_t i = 0; i < (n / 4) - 1; i++)
+            aasort_vector_cmpswap(in, i, i + 1);
+        aasort_vector_cmpswap_skew(in, (n / 4) - 1, 0);
+    } while(!aasort_is_sorted(n, in) && ++loop_count < 10);
+
+    if(loop_count == 10) {
+        printf("aasort: In-core step 2 has reached maximum loop count!\n");
+        return 0;
+    }
+
+    /*
+     * (3) Reorder the values from the transposed order into the original order.
+     *
+     * For us, this also means copying the data into the output array.
+     */
+
+    for(uint32_t i = 0; i < n / 4; i += 4)
+        aasort_vector_transpose((__m128*) &in[i]);
+
+    for(uint32_t j = 0; j < n / 16; j++) {
+        for(uint32_t i = 0; i < 4; i++) {
+            out[i * (n / 16) + j] = in[i + j * 4];
+        }
+    }
+
+    return 1;
 }
 
 void aasort_out_of_core()
@@ -1014,6 +1110,18 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
 
     for(uint32_t i = 0; i < n; i += block_elements) {
         uint32_t k = min(n - i, block_elements);
-        aasort_in_core(k, (__m128i*) &out[i]);
+
+        /*
+         * (2) Sort each block with the in-core sorting algorithm.
+         */
+
+        if(!aasort_in_core(k, (__m128i*) &in[i], (__m128i*) &out[i]))
+            return;
     }
+
+    /*
+     * (3) Merge the sorted blocks with the out-of-core sorting algorithm.
+     */
+
+
 }
