@@ -119,7 +119,7 @@ void verify_results(uint32_t n, uint32_t *out)
 void benchmark(uint32_t algn, uint32_t *algs)
 {
     // NOTE: n needs to be dividable by 16 for aasort.
-    const uint32_t n = 6400000 - 108544;
+    const uint32_t n = 6400000;
 
     uint32_t *list = valloc(4 * n);
     srand(time(NULL));
@@ -1226,7 +1226,7 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
     while(block_elements < n) {
         for(uint32_t i = 0; i < n; i += block_elements * 2) {
             if(n - i <= block_elements) {
-                // Last block? Copy.
+                // Last block? Copy. This will get squashed in at the end.
                 memcpy(&tout[i], &tin[i], (n - i) * 4);
             } else {
                 // Merge two blocks.
