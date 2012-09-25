@@ -100,9 +100,17 @@ void tim(sort_func sf, const char *name, uint32_t n, uint32_t *in, uint32_t *out
 
 void verify_results(uint32_t n, uint32_t *out)
 {
-    for(uint32_t j = 0; j < n - 1; j++) {
-        if(out[j] > out[j + 1]) {
-            printf("Resulting array is not sorted!!\n");
+    for(uint32_t i = 0; i < n - 1; i++) {
+        if(out[i] > out[i + 1]) {
+            printf("Resulting array is not sorted (position %u/%u): ", i, n);
+
+            printf("... ");
+            uint32_t from = i - 2 >= 0 ? i - 2 : 0;
+            uint32_t to = i + 4 <= n ? i + 4 : n;
+            for(int j = from; j < to; j++)
+                printf("%u ", out[j]);
+            printf("...\n");
+
             break;
         }
     }    
@@ -111,7 +119,7 @@ void verify_results(uint32_t n, uint32_t *out)
 void benchmark(uint32_t algn, uint32_t *algs)
 {
     // NOTE: n needs to be dividable by 16 for aasort.
-    const uint32_t n = 6400000;
+    const uint32_t n = 6400000 - 108544;
 
     uint32_t *list = valloc(4 * n);
     srand(time(NULL));
@@ -986,7 +994,7 @@ void heapsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
  *
  * NOTE: We expect the number of data elements to be dividable by 16!
  *
- * Large portions of the code adapted from here:
+ * Found quite some inspiration here:
  * https://github.com/herumi/opti/blob/master/intsort.hpp
  */
 
@@ -1092,14 +1100,15 @@ uint32_t aasort_in_core(uint32_t n, __m128i *in, __m128i *out)
      */
 
     uint32_t loop_count = 0;
+    const uint32_t max_loop_count = 15;
     do {
         for(uint32_t i = 0; i < (n / 4) - 1; i++)
             aasort_vector_cmpswap(in, i, i + 1);
         aasort_vector_cmpswap_skew(in, (n / 4) - 1, 0);
-    } while(!aasort_is_sorted(n, in) && ++loop_count < 10);
+    } while(!aasort_is_sorted(n, in) && ++loop_count < max_loop_count);
 
-    if(loop_count == 10) {
-        printf("aasort: In-core step 2 has reached maximum loop count!\n");
+    if(loop_count == max_loop_count) {
+        printf("aasort: In-core step 2 has reached maximum loop count %u!\n", max_loop_count);
         return 0;
     }
 
@@ -1156,19 +1165,23 @@ void aasort_out_of_core(uint32_t an, __m128i *a, uint32_t bn, __m128i *b, __m128
     while(ap < (an / 4) && bp < (bn / 4)) { 
         aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax); 
         out[op++] = vmin;
-        if(_mm_extract_epi32(a[ap], 0) < _mm_extract_epi32(b[bp], 0))
+        if(_mm_cvtsi128_si32(a[ap]) <= _mm_cvtsi128_si32(b[bp]))
             vmin = a[ap++];
         else
             vmin = b[bp++];
     }
 
     if(ap < (an / 4)) {
+        aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+        out[op++] = vmin;
         while(ap < (an / 4)) {
             vmin = a[ap++];
             aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
             out[op++] = vmin;
         }
     } else if(bp < (bn / 4)) {
+        aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+        out[op++] = vmin;
         while(bp < (bn / 4)) {
             vmin = b[bp++];
             aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
@@ -1189,11 +1202,7 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
     // As stated in the paper, we use half the L2 cache as block size.
     uint32_t l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
     uint32_t block_size = l2_cache / 2;
-    uint32_t block_elements = block_size / 4; 
-
-    printf("L2: %u\n", l2_cache);
-    printf("Blocksize: %u\n", block_size);
-    printf("Blockelements: %u\n", block_elements);
+    uint32_t block_elements = block_size / 4;
 
     for(uint32_t i = 0; i < n; i += block_elements) {
         uint32_t k = min(n - i, block_elements);
@@ -1210,38 +1219,38 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
      * (3) Merge the sorted blocks with the out-of-core sorting algorithm.
      */
 
-    int currently_in_out = 1;
-    uint32_t *tin = in;
-    uint32_t *tout = out;
+    int currently_in_in = 0;
+    uint32_t *tin = out;
+    uint32_t *tout = in;
 
-    printf("Is it? %u, %u, %u\n", block_elements < n, block_elements, n);
     while(block_elements < n) {
-        printf("%u\n", block_elements);
         for(uint32_t i = 0; i < n; i += block_elements * 2) {
             if(n - i <= block_elements) {
                 // Last block? Copy.
                 memcpy(&tout[i], &tin[i], (n - i) * 4);
             } else {
                 // Merge two blocks.
-                printf("%u %u\n", i, i + block_elements);
-                uint32_t k = min(n - (i + block_elements), block_elements);
-                aasort_out_of_core(block_elements, (__m128i*) &tin[i], k, (__m128i*) &tin[i + block_elements], (__m128i*) &tout[i]);
+                __m128i *a = (__m128i*) &tin[i];
+                uint32_t an = block_elements;
+                __m128i *b = (__m128i*) &tin[i + block_elements];
+                uint32_t bn = min(n - (i + block_elements), block_elements);
+                aasort_out_of_core(an, a, bn, b, (__m128i*) &tout[i]);
             }
         }
 
         block_elements *= 2;
 
-        if(currently_in_out) {
+        if(currently_in_in) {
             tin = out;
             tout = in;
         } else {
             tin = in;
             tout = out;
         }
-        currently_in_out = !currently_in_out;
+        currently_in_in = !currently_in_in;
     }
 
-    if(!currently_in_out) {
+    if(currently_in_in) {
         memcpy(out, in, n * 4);
     }
 }
