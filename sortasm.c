@@ -587,7 +587,7 @@ void quicksort_iterative_asm(uint32_t n, uint32_t *in, uint32_t *out)
         "\n qiasm_exit:"
         : // no output
         : "D"(out), "c"(n)
-        : "flags", "memory", "rax", "rbx", "rdx", "rsi"
+        : "flags", "memory", "rax", "rbx", "rdx", "rsi", "r11", "r12", "r13", "r14"
     );
 }
 
