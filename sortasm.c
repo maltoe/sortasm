@@ -1,192 +1,13 @@
+#include <getopt.h>
+#include <limits.h>
 #include <math.h>
+#include <smmintrin.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-
-// Includes for aasort.
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-#include <smmintrin.h>
-
-/* ***************************************************************************
- * Prototypes & Algorithm registry.
- * ***************************************************************************/
-void insertionsort(uint32_t, uint32_t*, uint32_t*);
-void insertionsort_asm(uint32_t, uint32_t*, uint32_t*);
-void bubblesort(uint32_t, uint32_t*, uint32_t*);
-void bubblesort_asm(uint32_t, uint32_t*, uint32_t*);
-void gnomesort(uint32_t, uint32_t*, uint32_t*);
-void gnomesort_rewrite(uint32_t, uint32_t*, uint32_t*);
-void gnomesort_asm(uint32_t, uint32_t*, uint32_t*);
-void combsort(uint32_t, uint32_t*, uint32_t*);
-void combsort_asm(uint32_t, uint32_t*, uint32_t*);
-void quicksort_recursive(uint32_t, uint32_t*, uint32_t*);
-void quicksort_iterative(uint32_t, uint32_t*, uint32_t*);
-void quicksort_iterative_asm(uint32_t, uint32_t*, uint32_t*);
-void heapsort(uint32_t, uint32_t*, uint32_t*);
-void heapsort_asm(uint32_t, uint32_t*, uint32_t*);
-void aasort(uint32_t, uint32_t*, uint32_t*);
-
-typedef void (*sort_func)(uint32_t, uint32_t*, uint32_t*);
-
-const uint32_t num_sort_funcs = 15;
-const sort_func sort_funcs[]= {
-    insertionsort,
-    insertionsort_asm,
-    bubblesort,
-    bubblesort_asm,
-    gnomesort,
-    gnomesort_rewrite,
-    gnomesort_asm,
-    combsort,
-    combsort_asm,
-    quicksort_recursive,
-    quicksort_iterative,
-    quicksort_iterative_asm,
-    heapsort,
-    heapsort_asm,
-    aasort
-};
-const char* sort_func_names[] = {
-    "insertionsort",
-    "insertionsort_asm",
-    "bubblesort",
-    "bubblesort_asm",
-    "gnomesort",
-    "gnomesort_rewrite",
-    "gnomesort_asm",
-    "combsort",
-    "combsort_asm",
-    "quicksort_recursive",
-    "quicksort_iterative",
-    "quicksort_iterative_asm",
-    "heapsort",
-    "heapsort_asm",
-    "aasort"
-};
-
-/* ***************************************************************************
- * Main. Benchmarking.
- * ***************************************************************************/
-
-void usage()
-{
-    printf("Usage:\n");
-    printf("\t./sortasm <alg> [num1, num2, num3, ...]\n");
-    printf("\nAlgorithms:\n");
-    for(int i = 0; i < num_sort_funcs; i++)
-        printf("\t[%d] %s\n", i, sort_func_names[i]);
-    printf("No numbers for benchmark.\n");
-    printf("No parameters for benchmarking all algorithms.\n");
-}
-
-void print_arr(uint32_t n, uint32_t *arr)
-{
-    for(uint32_t i = 0; i < n; i++)
-        printf("%u ", arr[i]);       
-    printf("\n");
-}
-
-void tim(sort_func sf, const char *name, uint32_t n, uint32_t *in, uint32_t *out) {
-    struct timespec t1, t2;
-    clock_gettime(CLOCK_REALTIME, &t1);
-    sf(n, in, out);
-    clock_gettime(CLOCK_REALTIME, &t2);
-    printf("%s : %f s.\n", name, 
-        (t2.tv_sec - t1.tv_sec) + 
-        (float) (t2.tv_nsec - t1.tv_nsec) / 1000000000);
-}
-
-void verify_results(uint32_t n, uint32_t *out)
-{
-    for(uint32_t i = 0; i < n - 1; i++) {
-        if(out[i] > out[i + 1]) {
-            printf("Resulting array is not sorted (position %u/%u): ", i, n);
-
-            printf("... ");
-            uint32_t from = i - 2 >= 0 ? i - 2 : 0;
-            uint32_t to = i + 4 <= n ? i + 4 : n;
-            for(int j = from; j < to; j++)
-                printf("%u ", out[j]);
-            printf("...\n");
-
-            break;
-        }
-    }    
-}
-
-void benchmark(uint32_t algn, uint32_t *algs)
-{
-    // NOTE: n needs to be dividable by 16 for aasort.
-    const uint32_t n = 6400000;
-
-    uint32_t *list = valloc(4 * n);
-    srand(time(NULL));
-    for(uint32_t i = 0; i < n; i++)
-        list[i] = rand();
-
-    uint32_t *in = valloc(4 * n);
-    uint32_t *out = valloc(4 * n);
-    for(uint32_t i = 0; i < algn; i++) {
-        uint32_t alg = algs[i];
-        
-        for(uint32_t j = 0; j < n; j++) {
-            in[j] = list[j];
-            out[j] = list[j];        
-        }
-        
-        tim(sort_funcs[alg], sort_func_names[alg], n, in, out);
-        verify_results(n, out);
-    }
-
-    free(list);
-    free(in);
-    free(out);
-}
-
-int main(int argc, char **argv) 
-{
-    if(argc == 1) {
-        // Benchmark all algorithms.
-        uint32_t algs[num_sort_funcs];
-        for(uint32_t i = 0; i < num_sort_funcs; i++)
-            algs[i] = i;
-        benchmark(num_sort_funcs, algs);
-        return 0;
-    }
-    
-    uint32_t alg;
-    if((sscanf(argv[1], "%i", &alg) != 1) || (alg < 0) || (alg > num_sort_funcs - 1)) {
-        usage();
-        return 1;
-    }
-    
-    if(argc == 2) {
-        // Benchmark single algorithm.
-        uint32_t algs[] = { alg };
-        benchmark(1, algs);
-        return 0;
-    }
-    
-    // Otherwise: Run single algorithm with given data.
-    
-    uint32_t n = argc - 2;    
-    uint32_t in[n], out[n];
-    for(uint32_t i = 0; i < n; i++) {
-        if(sscanf(argv[i + 2], "%u", &in[i]) != 1) {
-            usage();
-            return 1;
-        }
-        out[i] = in[i];
-    }
-    
-    sort_funcs[alg](n, in, out);
-    verify_results(n, out);
-    print_arr(n, out);
-
-    return 0;
-}
 
 /* ***************************************************************************
  * General helper functions.
@@ -1253,4 +1074,238 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
     if(currently_in_in) {
         memcpy(out, in, n * 4);
     }
+}
+
+/* ***************************************************************************
+ * Algorithm registry.
+ * ***************************************************************************/
+
+typedef void (*sort_func)(uint32_t, uint32_t*, uint32_t*);
+
+typedef struct {
+    const char *name;
+    sort_func func;
+    uint32_t max_n; // Do not run benchmarks for n larger than this value.
+} algorithm_st;
+
+algorithm_st algorithms[] = {
+    {
+        "insertionsort",
+        insertionsort,
+        400000
+    },
+    {
+        "insertionsort_asm",
+        insertionsort_asm,
+        400000
+    },
+    {
+        "bubblesort",
+        bubblesort,
+        100000
+    },
+    {
+        "bubblesort_asm",
+        bubblesort_asm,
+        100000
+    },
+    {
+        "gnomesort",
+        gnomesort,
+        200000
+    },
+    {
+        "gnomesort_rewrite",
+        gnomesort_rewrite,
+        100000
+    },
+    {
+        "gnomesort_asm",
+        gnomesort_asm,
+        200000
+    },
+    {
+        "combsort",
+        combsort,
+        UINT_MAX
+    },
+    {
+        "combsort_asm",
+        combsort_asm,
+        UINT_MAX
+    },
+    {
+        "quicksort_recursive",
+        quicksort_recursive,
+        UINT_MAX
+    },
+    {
+        "quicksort_iterative",
+        quicksort_iterative,
+        UINT_MAX
+    },
+    {
+        "quicksort_iterative_asm",
+        quicksort_iterative_asm,
+        UINT_MAX
+    },
+    {
+        "heapsort",
+        heapsort,
+        UINT_MAX
+    },
+    {
+        "heapsort_asm",
+        heapsort_asm,
+        UINT_MAX
+    },
+    {
+        "aasort",
+        aasort,
+        UINT_MAX
+    }
+};
+
+const uint32_t num_algorithms = sizeof(algorithms) / sizeof(algorithm_st);
+
+/* ***************************************************************************
+ * Main. Benchmarking.
+ * ***************************************************************************/
+
+void usage(const char *appname)
+{
+    printf("Usage:\n");
+    printf("\t%s [-a <alg>] [-n <number of elements>] [number, number, number...]\n", appname);
+    printf("\nAlgorithms:\n");
+    for(int i = 0; i < num_algorithms; i++)
+        printf("\t[%d] %s\n", i, algorithms[i].name);
+    printf("\nRemember: Number of elements must be dividable by 16 for aasort to work.\n");
+}
+
+void print_arr(uint32_t n, uint32_t *arr)
+{
+    for(uint32_t i = 0; i < n; i++)
+        printf("%u ", arr[i]);       
+    printf("\n");
+}
+
+void benchmark_single(algorithm_st alg, uint32_t n, uint32_t *in, uint32_t *out) 
+{
+    if(n > alg.max_n) {
+        printf("Skipping %s, as it would probably take forever...", alg.name);
+        return;
+    }
+
+    // Benchmark runtime.
+    struct timespec t1, t2;
+    clock_gettime(CLOCK_REALTIME, &t1);
+
+    alg.func(n, in, out);
+
+    clock_gettime(CLOCK_REALTIME, &t2);
+
+    printf("%s : %f s.\n", alg.name, 
+        (t2.tv_sec - t1.tv_sec) + (float) (t2.tv_nsec - t1.tv_nsec) / 1000000000);
+
+    // Verify results.
+    for(uint32_t i = 0; i < n - 1; i++) {
+        if(out[i] > out[i + 1]) {
+            printf("Resulting array is not sorted (position %u/%u): ", i, n);
+
+            printf("... ");
+            uint32_t from = i - 2 >= 0 ? i - 2 : 0;
+            uint32_t to = i + 4 <= n ? i + 4 : n;
+            for(int j = from; j < to; j++)
+                printf("%u ", out[j]);
+            printf("...\n");
+
+            break;
+        }
+    }  
+}
+
+void benchmark(int n, int algo)
+{
+    uint32_t *list = valloc(4 * n);
+    srand(time(NULL));
+    for(uint32_t i = 0; i < n; i++)
+        list[i] = rand();
+
+    uint32_t *in = valloc(4 * n);
+    uint32_t *out = valloc(4 * n);
+
+    if(algo == -1) {
+
+        for(uint32_t i = 0; i < num_algorithms; i++) {
+            for(uint32_t j = 0; j < n; j++) {
+                in[j] = list[j];
+                out[j] = list[j];        
+            }
+
+            benchmark_single(algorithms[i], n, in, out);
+        }
+
+    } else {
+
+        for(uint32_t j = 0; j < n; j++) {
+            in[j] = list[j];
+            out[j] = list[j];        
+        }
+
+        benchmark_single(algorithms[algo], n, in, out);
+    }
+
+    free(list);
+    free(in);
+    free(out);
+}
+
+int main(int argc, char **argv) 
+{
+    // NOTE: n needs to be dividable by 16 for aasort.
+    uint32_t n = 64000;
+    int alg = -1;
+
+    int c;
+    while((c = getopt(argc, argv, "a:n:")) != -1) {
+        switch(c) {
+        case 'a':
+           if((sscanf(optarg, "%i", &alg) != 1) 
+                || (alg < 0) || (alg > num_algorithms - 1)) {
+                usage(argv[0]);
+                return 1;
+            } 
+            break;
+        case 'n':
+            if((sscanf(optarg, "%u", &n) != 1) 
+                || (n % 16 != 0)) {
+                usage(argv[0]);
+                return 1;            
+            }
+            break;
+        default:
+            usage(argv[0]);
+            return 1;
+        }
+    }
+
+    if(optind < argc) {
+        // Number list given.
+        n = argc - optind;
+        uint32_t in[n], out[n];
+        for(int i = optind; i < argc; i++) {
+            if(sscanf(argv[i], "%u", &in[i - optind]) != 1) {
+                usage(argv[0]);
+                return 1;
+            }
+            out[i - optind] = in[i - optind];            
+        }
+
+        benchmark_single(algorithms[alg], n, in, out);
+        print_arr(n, out);
+    } else {
+        benchmark(n, alg);
+    }
+
+    return 0;
 }
