@@ -1182,18 +1182,19 @@ void usage(const char *appname)
     printf("\nRemember: Number of elements must be dividable by 16 for aasort to work.\n");
 }
 
-void print_arr(uint32_t n, uint32_t *arr)
-{
-    for(uint32_t i = 0; i < n; i++)
-        printf("%u ", arr[i]);       
-    printf("\n");
-}
-
-void benchmark_single(algorithm_st alg, uint32_t n, uint32_t *in, uint32_t *out) 
+void benchmark(algorithm_st alg, uint32_t n, uint32_t *data, int print_results) 
 {
     if(n > alg.max_n) {
         printf("Skipping %s, as it would probably take forever...\n", alg.name);
         return;
+    }
+
+    // Prepare data.
+    uint32_t *in = valloc(4 * n);
+    uint32_t *out = valloc(4 * n);
+    for(uint32_t j = 0; j < n; j++) {
+        in[j] = data[j];
+        out[j] = data[j];        
     }
 
     // Benchmark runtime.
@@ -1221,43 +1222,17 @@ void benchmark_single(algorithm_st alg, uint32_t n, uint32_t *in, uint32_t *out)
 
             break;
         }
-    }  
-}
+    } 
 
-void benchmark(int n, int algo)
-{
-    uint32_t *list = valloc(4 * n);
-    srand(time(NULL));
-    for(uint32_t i = 0; i < n; i++)
-        list[i] = rand();
-
-    uint32_t *in = valloc(4 * n);
-    uint32_t *out = valloc(4 * n);
-
-    if(algo == -1) {
-
-        for(uint32_t i = 0; i < num_algorithms; i++) {
-            for(uint32_t j = 0; j < n; j++) {
-                in[j] = list[j];
-                out[j] = list[j];        
-            }
-
-            benchmark_single(algorithms[i], n, in, out);
-        }
-
-    } else {
-
-        for(uint32_t j = 0; j < n; j++) {
-            in[j] = list[j];
-            out[j] = list[j];        
-        }
-
-        benchmark_single(algorithms[algo], n, in, out);
+    if(print_results) {
+        for(uint32_t i = 0; i < n; i++)
+            printf("%u ", out[i]);       
+        printf("\n");
     }
 
-    free(list);
+    // Cleanup.
     free(in);
-    free(out);
+    free(out); 
 }
 
 int main(int argc, char **argv) 
@@ -1288,23 +1263,37 @@ int main(int argc, char **argv)
         }
     }
 
+    uint32_t *data;
+    int print_results = 0;
+
     if(optind < argc) {
         // Number list given.
         n = argc - optind;
-        uint32_t in[n], out[n];
+        print_results = 1;
+
+        data = malloc(4 * n);
         for(int i = optind; i < argc; i++) {
-            if(sscanf(argv[i], "%u", &in[i - optind]) != 1) {
+            if(sscanf(argv[i], "%u", &data[i - optind]) != 1) {
                 usage(argv[0]);
                 return 1;
-            }
-            out[i - optind] = in[i - optind];            
+            }           
         }
-
-        benchmark_single(algorithms[alg], n, in, out);
-        print_arr(n, out);
     } else {
-        benchmark(n, alg);
+        // Randomize input.
+        data = malloc(4 * n);
+        srand(time(NULL));
+        for(uint32_t i = 0; i < n; i++)
+            data[i] = rand();
     }
 
+    if(alg == -1) {
+        for(uint32_t i = 0; i < num_algorithms; i++) {
+            benchmark(algorithms[i], n, data, print_results);
+        }
+    } else {
+        benchmark(algorithms[alg], n, data, print_results);
+    }
+
+    free(data);
     return 0;
 }
