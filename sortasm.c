@@ -1092,12 +1092,12 @@ algorithm_st algorithms[] = {
     {
         "insertionsort",
         insertionsort,
-        400000
+        200000
     },
     {
         "insertionsort_asm",
         insertionsort_asm,
-        400000
+        200000
     },
     {
         "bubblesort",
@@ -1112,7 +1112,7 @@ algorithm_st algorithms[] = {
     {
         "gnomesort",
         gnomesort,
-        200000
+        100000
     },
     {
         "gnomesort_rewrite",
@@ -1122,7 +1122,7 @@ algorithm_st algorithms[] = {
     {
         "gnomesort_asm",
         gnomesort_asm,
-        200000
+        100000
     },
     {
         "combsort",
@@ -1192,7 +1192,7 @@ void print_arr(uint32_t n, uint32_t *arr)
 void benchmark_single(algorithm_st alg, uint32_t n, uint32_t *in, uint32_t *out) 
 {
     if(n > alg.max_n) {
-        printf("Skipping %s, as it would probably take forever...", alg.name);
+        printf("Skipping %s, as it would probably take forever...\n", alg.name);
         return;
     }
 
