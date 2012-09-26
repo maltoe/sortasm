@@ -119,23 +119,106 @@ algorithm_st algorithms[] = {
 const uint32_t num_algorithms = sizeof(algorithms) / sizeof(algorithm_st);
 
 /* ***************************************************************************
+ * Scenarios.
+ * ***************************************************************************/
+
+void random_scenario(uint32_t n, uint32_t *data)
+{
+    srand(time(NULL));
+    for(uint32_t i = 0; i < n; i++)
+        data[i] = rand();
+}
+
+void random_in_n_scenario(uint32_t n, uint32_t *data)
+{
+    srand(time(NULL));
+    for(uint32_t i = 0; i < n; i++)
+        data[i] = rand() % n;
+}
+
+
+void presorted_scenario(uint32_t n, uint32_t *data)
+{
+    for(uint32_t i = 0; i < n; i++)
+        data[i] = i;
+}
+
+void reversed_scenario(uint32_t n, uint32_t *data)
+{
+    for(uint32_t i = 0; i < n; i++)
+        data[i] = n - i;
+}
+
+void ninety_scenario(uint32_t n, uint32_t *data)
+{
+    srand(time(NULL));
+    for(uint32_t i = 0; i < n; i++) {
+        if(rand() % 100 >= 90)
+            data[i] = rand() % n;
+        else
+            data[i] = i;
+    }
+}
+
+typedef void (*scenario_func)(uint32_t, uint32_t*);
+
+typedef struct {
+    const char *name;
+    scenario_func func;
+} scenario_st;
+
+scenario_st scenarios[] = {
+    {
+        "rand % UINT_MAX",
+        random_scenario
+    },
+    {
+        "rand % n",
+        random_in_n_scenario
+    },
+    {
+        "presorted",
+        presorted_scenario
+    },
+    {
+        "reverse presorted",
+        reversed_scenario
+    },
+    {
+        "90% presorted",
+        ninety_scenario
+    }
+};
+
+const uint32_t num_scenarios = sizeof(scenarios) / sizeof(scenario_st);
+
+/* ***************************************************************************
  * Main. Benchmarking.
  * ***************************************************************************/
+
+const uint32_t DEFAULT_N = 64000;
+const uint32_t DEFAULT_SCENARIO = 0;
 
 void usage(const char *appname)
 {
     printf("Usage:\n");
-    printf("\t%s [-a <alg>] [-n <number of elements>] [number, number, number...]\n", appname);
+    printf("\t%s [-a <alg>] [-n <number of elements>] [-s <scenario>]\n", appname);
+    printf("\t%s [-a <alg>] <number, number, number...>\n", appname);
     printf("\nAlgorithms:\n");
-    for(int i = 0; i < num_algorithms; i++)
-        printf("\t[%d] %s\n", i, algorithms[i].name);
-    printf("\nRemember: Number of elements must be dividable by 16 for aasort to work.\n");
+    for(uint32_t i = 0; i < num_algorithms; i++)
+        printf("\t[%u] %s\n", i, algorithms[i].name);
+    printf("\nScenarios:\n");
+    for(uint32_t i = 0; i < num_scenarios; i++)
+        printf("\t[%u] %s\n", i, scenarios[i].name);
+    printf("\nIf -a is not specified, sortasm will benchmark all algorithms.\n");
+    printf("If either -n or -s are not specified, benchmarks will default to n = %u resp. s = \"%s\".\n", DEFAULT_N, scenarios[DEFAULT_SCENARIO].name);
+    printf("Remember: Number of elements must be dividable by 16 for aasort to work.\n\n");
 }
 
 void benchmark(algorithm_st alg, uint32_t n, uint32_t *data, int print_results) 
 {
     if(n > alg.max_n) {
-        printf("Skipping %s, as it would probably take forever...\n", alg.name);
+        printf("Skipping %s.\n", alg.name);
         return;
     }
 
@@ -188,18 +271,26 @@ void benchmark(algorithm_st alg, uint32_t n, uint32_t *data, int print_results)
 int main(int argc, char **argv) 
 {
     // NOTE: n needs to be dividable by 16 for aasort.
-    uint32_t n = 64000;
+    uint32_t n = DEFAULT_N;
+    uint32_t s = DEFAULT_SCENARIO;
     int alg = -1;
 
     int c;
-    while((c = getopt(argc, argv, "a:n:")) != -1) {
+    while((c = getopt(argc, argv, "a:n:s:")) != -1) {
         switch(c) {
         case 'a':
-           if((sscanf(optarg, "%i", &alg) != 1) 
+            if((sscanf(optarg, "%i", &alg) != 1) 
                 || (alg < 0) || (alg > num_algorithms - 1)) {
                 usage(argv[0]);
                 return 1;
             } 
+            break;
+        case 's':
+            if((sscanf(optarg, "%u", &s) != 1)
+                || (s > num_scenarios - 1)) {
+                usage(argv[0]);
+                return 1;
+            }
             break;
         case 'n':
             if(sscanf(optarg, "%u", &n) != 1) {
@@ -229,11 +320,10 @@ int main(int argc, char **argv)
             }           
         }
     } else {
-        // Randomize input.
+        // Load scenario.
+        printf("Scenario: %s.\n", scenarios[s].name);
         data = malloc(4 * n);
-        srand(time(NULL));
-        for(uint32_t i = 0; i < n; i++)
-            data[i] = rand();
+        scenarios[s].func(n, data);
     }
 
     if(alg == -1) {
