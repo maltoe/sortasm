@@ -410,30 +410,22 @@ uint32_t aasort_in_core(uint32_t n, __m128i *in, __m128i *out)
     return 1;
 }
 
-typedef union {
-    __m128i v;
-    uint32_t i[4];
-} m128i_u;
-
-void aasort_vector_merge(m128i_u *a, m128i_u *b)
+void aasort_vector_merge(__m128i *a, __m128i *b)
 {
-    uint32_t o[8];
-    uint32_t ap = 0, bp = 0, op = 0;
-    while(ap < 4 && bp < 4) {
-        if((*a).i[ap] < (*b).i[bp])
-            o[op++] = (*a).i[ap++];
-        else 
-            o[op++] = (*b).i[bp++];
-    }
-
-    while(ap < 4)
-        o[op++] = (*a).i[ap++];
-
-    while(bp < 4)
-        o[op++] = (*b).i[bp++];
-
-    (*a).v = _mm_load_si128((__m128i*) &o[0]);
-    (*b).v = _mm_load_si128((__m128i*) &o[4]);
+    __m128i m = _mm_min_epu32(*a, *b); // [h:f:d:m00] = [m33:m22:m11:m00]
+    __m128i M = _mm_max_epu32(*a, *b);      // [M33:g:e:c] = [M33:m22:M11:M00]
+    __m128i s0 = _mm_unpackhi_epi64(m, m); // [  h:f:h:f]
+    __m128i s1 = _mm_min_epu32(s0, M);    // [  h:f:u:s]
+    __m128i s2 = _mm_max_epu32(s0, M);    // [M33:g:v:t]
+    __m128i s3 = _mm_unpacklo_epi64(s1, _mm_unpackhi_epi64(M, M)); // [M33:g:u:s]
+    __m128i s4 = _mm_unpacklo_epi64(s2, m); // [d:m00:v:t]
+    s4 = _mm_shuffle_epi32(s4, _MM_SHUFFLE(2, 1, 0, 3)); // [m00:v:t:d]
+    __m128i s5 = _mm_min_epu32(s3, s4); // [m00:mgv:mtu:msd]
+    __m128i s6 = _mm_max_epu32(s3, s4); // [M33:Mgv:Mtu:Msd]
+    __m128i s7 = _mm_insert_epi32(s5, _mm_cvtsi128_si32(s6), 2); // [m00:Msd:mtu:msd]
+    __m128i s8 = _mm_insert_epi32(s6, _mm_extract_epi32(s5, 2), 0); // [M33:Mgv:Mtu:mgv]
+    *a = _mm_shuffle_epi32(s7, _MM_SHUFFLE(1, 2, 0, 3));
+    *b = _mm_shuffle_epi32(s8, _MM_SHUFFLE(3, 2, 0, 1));
 }
 
 void aasort_out_of_core(uint32_t an, __m128i *a, uint32_t bn, __m128i *b, __m128i *out)
@@ -443,7 +435,7 @@ void aasort_out_of_core(uint32_t an, __m128i *a, uint32_t bn, __m128i *b, __m128
     __m128i vmin = a[ap++];
     __m128i vmax = b[bp++];
     while(ap < (an / 4) && bp < (bn / 4)) { 
-        aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax); 
+        aasort_vector_merge(&vmin, &vmax); 
         out[op++] = vmin;
         if(_mm_cvtsi128_si32(a[ap]) <= _mm_cvtsi128_si32(b[bp]))
             vmin = a[ap++];
@@ -452,19 +444,19 @@ void aasort_out_of_core(uint32_t an, __m128i *a, uint32_t bn, __m128i *b, __m128
     }
 
     if(ap < (an / 4)) {
-        aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+        aasort_vector_merge(&vmin, &vmax);
         out[op++] = vmin;
         while(ap < (an / 4)) {
             vmin = a[ap++];
-            aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+            aasort_vector_merge(&vmin, &vmax);
             out[op++] = vmin;
         }
     } else if(bp < (bn / 4)) {
-        aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+        aasort_vector_merge(&vmin, &vmax);
         out[op++] = vmin;
         while(bp < (bn / 4)) {
             vmin = b[bp++];
-            aasort_vector_merge((m128i_u*) &vmin, (m128i_u*) &vmax);
+            aasort_vector_merge(&vmin, &vmax);
             out[op++] = vmin;
         }
     }
