@@ -1,10 +1,11 @@
 FLAGS_COMMON=--std=gnu99 -msse4.1 -Wall
 ifdef DEBUG
 CFLAGS=$(FLAGS_COMMON) -O0 -g -ggdb -DDEBUG
+ASMFLAGS=$(FLAGS_COMMON) -O0 -g -ggdb -DDEBUG
 else
 CFLAGS=$(FLAGS_COMMON) -O2
-endif
 ASMFLAGS=$(FLAGS_COMMON) -O0
+endif
 LDFLAGS=-lrt -lm
 
 sortasm: sortasm.c algorithms_c.c algorithms_asm.c
