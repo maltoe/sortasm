@@ -194,6 +194,7 @@ void gnomesort_asm(uint32_t n, uint32_t *in, uint32_t *out)
     );
 }
 
+const float combsort_asm_shrink_factor = 1.24733095F;
 void combsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
 {
     (void) in;
@@ -207,7 +208,7 @@ void combsort_asm(uint32_t n, uint32_t *in, uint32_t *out)
             // uint32_t gap = n;
             "\n\t movl %%ecx, %%edx"
             // Load static shrink_factor into xmm2.
-            "\n\t movss combsort_shrink_factor, %%xmm2"
+            "\n\t movss combsort_asm_shrink_factor, %%xmm2"
         
         "\n casm_outer_loop:"
         
