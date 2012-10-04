@@ -16,6 +16,7 @@ void gnomesort_rewrite(uint32_t, uint32_t*, uint32_t*);
 void combsort(uint32_t, uint32_t*, uint32_t*);
 void quicksort_recursive(uint32_t, uint32_t*, uint32_t*);
 void quicksort_iterative(uint32_t, uint32_t*, uint32_t*);
+void quicksort_naive_parallel(uint32_t, uint32_t*, uint32_t*);
 void heapsort(uint32_t, uint32_t*, uint32_t*);
 void aasort(uint32_t, uint32_t*, uint32_t*);
 
@@ -77,12 +78,12 @@ algorithm_st algorithms[] = {
     {
         "combsort",
         combsort,
-        UINT_MAX
+        5000000
     },
     {
         "combsort_asm",
         combsort_asm,
-        UINT_MAX
+        5000000
     },
     {
         "quicksort_recursive",
@@ -95,6 +96,11 @@ algorithm_st algorithms[] = {
         UINT_MAX
     },
     {
+        "quicksort_naive_parallel",
+        quicksort_naive_parallel,
+        UINT_MAX
+    },
+    {
         "quicksort_iterative_asm",
         quicksort_iterative_asm,
         UINT_MAX
@@ -102,12 +108,12 @@ algorithm_st algorithms[] = {
     {
         "heapsort",
         heapsort,
-        UINT_MAX
+        1000000
     },
     {
         "heapsort_asm",
         heapsort_asm,
-        UINT_MAX
+        1000000
     },
     {
         "aasort",

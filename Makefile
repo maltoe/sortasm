@@ -6,7 +6,7 @@ else
 CFLAGS=$(FLAGS_COMMON) -O2
 ASMFLAGS=$(FLAGS_COMMON) -O0
 endif
-LDFLAGS=-lrt -lm
+LDFLAGS=-lrt -lm -lpthread
 
 sortasm: sortasm.c algorithms_c.c algorithms_asm.c
 	gcc $(CFLAGS) algorithms_c.c -c -o algorithms_c.o
