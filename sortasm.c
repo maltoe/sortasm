@@ -4,28 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-/* ***************************************************************************
- * Prototypes.
- * ***************************************************************************/
-
-void insertionsort(uint32_t, uint32_t*, uint32_t*);
-void bubblesort(uint32_t, uint32_t*, uint32_t*);
-void gnomesort(uint32_t, uint32_t*, uint32_t*);
-void gnomesort_rewrite(uint32_t, uint32_t*, uint32_t*);
-void combsort(uint32_t, uint32_t*, uint32_t*);
-void quicksort_recursive(uint32_t, uint32_t*, uint32_t*);
-void quicksort_iterative(uint32_t, uint32_t*, uint32_t*);
-void quicksort_naive_parallel(uint32_t, uint32_t*, uint32_t*);
-void heapsort(uint32_t, uint32_t*, uint32_t*);
-void aasort(uint32_t, uint32_t*, uint32_t*);
-
-void insertionsort_asm(uint32_t, uint32_t*, uint32_t*);
-void bubblesort_asm(uint32_t, uint32_t*, uint32_t*);
-void gnomesort_asm(uint32_t, uint32_t*, uint32_t*);
-void combsort_asm(uint32_t, uint32_t*, uint32_t*);
-void quicksort_iterative_asm(uint32_t, uint32_t*, uint32_t*);
-void heapsort_asm(uint32_t, uint32_t*, uint32_t*);
+#include "algorithms/algorithms.h"
 
 /* ***************************************************************************
  * Algorithm registry.
@@ -78,12 +57,12 @@ algorithm_st algorithms[] = {
     {
         "combsort",
         combsort,
-        5000000
+        UINT_MAX
     },
     {
         "combsort_asm",
         combsort_asm,
-        5000000
+        UINT_MAX
     },
     {
         "quicksort_recursive",
@@ -96,11 +75,6 @@ algorithm_st algorithms[] = {
         UINT_MAX
     },
     {
-        "quicksort_naive_parallel",
-        quicksort_naive_parallel,
-        UINT_MAX
-    },
-    {
         "quicksort_iterative_asm",
         quicksort_iterative_asm,
         UINT_MAX
@@ -108,12 +82,12 @@ algorithm_st algorithms[] = {
     {
         "heapsort",
         heapsort,
-        1000000
+        UINT_MAX
     },
     {
         "heapsort_asm",
         heapsort_asm,
-        1000000
+        UINT_MAX
     },
     {
         "aasort",
@@ -331,6 +305,8 @@ int main(int argc, char **argv)
         data = malloc(4 * n);
         scenarios[s].func(n, data);
     }
+
+    printf("List elements: %u\n", n);
 
     if(alg == -1) {
         for(uint32_t i = 0; i < num_algorithms; i++) {
