@@ -6,7 +6,7 @@ else
 CFLAGS=$(FLAGS_COMMON) -O2 -flto
 ASMFLAGS=$(FLAGS_COMMON) -O0
 endif
-LDFLAGS=-lrt -lm
+LDFLAGS=-lrt -lm -lpthread
 
 include algorithms/Makefile.inc
 OBJS=sortasm.o

@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <math.h> /* for log */
 #include <stdlib.h>
 #include "algorithms.h"
@@ -80,3 +81,51 @@ void quicksort_iterative(uint32_t n, uint32_t *in, uint32_t *out)
     free(stack_n);
     free(stack_out);
 }
+
+
+const uint32_t num_threads = 8;
+typedef struct {
+    uint32_t n;
+    uint32_t *in;
+    uint32_t *out;
+} algorithm_params_st;
+
+void* quicksort_naive_parallel_run(void *data) {
+    algorithm_params_st *params = (algorithm_params_st*) data;
+    quicksort_iterative(params->n, params->in, params->out);
+    return NULL;
+}
+
+void quicksort_naive_parallel(uint32_t n, uint32_t *in, uint32_t *out)
+{
+    uint32_t stack_n[num_threads];
+    uint32_t *stack_out[num_threads];
+    stack_n[0] = n;
+    stack_out[0] = out;
+    
+    for(uint32_t i = 1; i < num_threads; i *= 2) {
+        for(uint32_t j = 0; j < i; j++) {
+            uint32_t cur_n = stack_n[j];
+            uint32_t *cur_out = stack_out[j];
+            uint32_t store_idx = quicksort_partition_helper(cur_n, cur_out);
+            stack_n[j] = store_idx;
+            // stack_out[j] = cur_out;
+            stack_n[i + j] = cur_n - store_idx - 1;
+            stack_out[i + j] = &cur_out[store_idx + 1];
+        }
+    }
+
+    pthread_t threads[num_threads];
+    algorithm_params_st params[num_threads];
+    for(uint32_t i = 0; i < num_threads; i++) {
+        params[i].n = stack_n[i];
+        params[i].in = stack_out[i];
+        params[i].out = stack_out[i];
+        pthread_create(&threads[i], NULL, quicksort_naive_parallel_run, &params[i]);
+    }
+
+    for(uint32_t i = 0; i < num_threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+}
+

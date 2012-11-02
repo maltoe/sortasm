@@ -57,12 +57,12 @@ algorithm_st algorithms[] = {
     {
         "combsort",
         combsort,
-        UINT_MAX
+        500000
     },
     {
         "combsort_asm",
         combsort_asm,
-        UINT_MAX
+        500000
     },
     {
         "quicksort_recursive",
@@ -80,14 +80,19 @@ algorithm_st algorithms[] = {
         UINT_MAX
     },
     {
+        "quicksort_naive_parallel",
+        quicksort_naive_parallel,
+        UINT_MAX
+    },    
+    {
         "heapsort",
         heapsort,
-        UINT_MAX
+        1000000
     },
     {
         "heapsort_asm",
         heapsort_asm,
-        UINT_MAX
+        1000000
     },
     {
         "aasort",
