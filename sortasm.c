@@ -70,6 +70,11 @@ algorithm_st algorithms[] = {
         UINT_MAX
     },
     {
+        "mergesort_parallel",
+        mergesort_parallel,
+        UINT_MAX
+    },
+    {
         "quicksort_recursive",
         quicksort_recursive,
         UINT_MAX
