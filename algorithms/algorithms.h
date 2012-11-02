@@ -12,6 +12,7 @@ void bubblesort(uint32_t, uint32_t*, uint32_t*);
 void gnomesort(uint32_t, uint32_t*, uint32_t*);
 void gnomesort_rewrite(uint32_t, uint32_t*, uint32_t*);
 void combsort(uint32_t, uint32_t*, uint32_t*);
+void mergesort(uint32_t, uint32_t*, uint32_t*);
 void quicksort_recursive(uint32_t, uint32_t*, uint32_t*);
 void quicksort_iterative(uint32_t, uint32_t*, uint32_t*);
 void quicksort_naive_parallel(uint32_t, uint32_t*, uint32_t*);

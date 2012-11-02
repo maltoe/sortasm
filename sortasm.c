@@ -65,6 +65,11 @@ algorithm_st algorithms[] = {
         500000
     },
     {
+        "mergesort",
+        mergesort,
+        UINT_MAX
+    },
+    {
         "quicksort_recursive",
         quicksort_recursive,
         UINT_MAX
@@ -232,7 +237,7 @@ void benchmark(algorithm_st alg, uint32_t n, uint32_t *data, int print_results)
             printf("Resulting array is not sorted (position %u/%u): ", i, n);
 
             printf("... ");
-            uint32_t from = i - 2 >= 0 ? i - 2 : 0;
+            uint32_t from = i > 2 ? i - 2 : 0;
             uint32_t to = i + 4 <= n ? i + 4 : n;
             for(int j = from; j < to; j++)
                 printf("%u ", out[j]);
