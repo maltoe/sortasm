@@ -23,8 +23,7 @@
  * https://github.com/herumi/opti/blob/master/intsort.hpp
  */
 
-uint32_t l2_cache;
-uint32_t l2_cache_set = 0;
+static uint32_t l2_cache = 0;
 
 #ifndef DEBUG
 inline
@@ -220,10 +219,8 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
      */
 
     // As stated in the paper, we use half the L2 cache as block size.
-    if(!l2_cache_set) {
+    if(!l2_cache)
         l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
-        l2_cache_set = 1;
-    }
     uint32_t block_size = l2_cache / 2;
     uint32_t block_elements = block_size / 4;
 
@@ -279,10 +276,10 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
 }
 
 /* 
- * As AA-Sort's out-of-core algorithm is essentially quicksort, we
+ * As AA-Sort's out-of-core algorithm is essentially mergesort, we
  * naively parallelize it using a divide-and-conquer approach. We
  * - for now - ignore the paper's advice on a parallel implementation
- * (esp. the part about cooperating threads).
+ * (esp. the part about threads cooperating on the out-of-core algorithm).
  */
 
 static const uint32_t thread_depth = 2;
@@ -302,10 +299,8 @@ void* aasort_naive_parallel_run(void *data)
     } else if(params->td == 0) {
         aasort(params->n, params->in, params->out);
     }   else {
-        if(!l2_cache_set) {
+        if(!l2_cache)
             l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
-            l2_cache_set = 1;
-        }
         uint32_t block_size = l2_cache / 2;
         uint32_t block_elements = block_size / 4;
 
