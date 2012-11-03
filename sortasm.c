@@ -108,6 +108,11 @@ algorithm_st algorithms[] = {
         "aasort",
         aasort,
         UINT_MAX
+    },
+    {
+        "aasort_naive_parallel",
+        aasort_naive_parallel,
+        UINT_MAX
     }
 };
 

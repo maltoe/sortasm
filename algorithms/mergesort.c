@@ -33,7 +33,7 @@ void mergesort(uint32_t n, uint32_t *in, uint32_t *out)
 	merge(n, nl, in, nu, &in[nl], out);
 }
 
-const uint32_t thread_depth = 3;
+static const uint32_t thread_depth = 3;
 typedef struct {
 		uint32_t td;
     uint32_t n;

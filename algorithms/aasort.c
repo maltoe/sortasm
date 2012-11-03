@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <smmintrin.h>
 #include <stdio.h>
 #include <string.h> /* for memcpy */
@@ -21,6 +22,9 @@
  * Found quite some inspiration here:
  * https://github.com/herumi/opti/blob/master/intsort.hpp
  */
+
+uint32_t l2_cache;
+uint32_t l2_cache_set = 0;
 
 #ifndef DEBUG
 inline
@@ -216,7 +220,10 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
      */
 
     // As stated in the paper, we use half the L2 cache as block size.
-    uint32_t l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
+    if(!l2_cache_set) {
+        l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
+        l2_cache_set = 1;
+    }
     uint32_t block_size = l2_cache / 2;
     uint32_t block_elements = block_size / 4;
 
@@ -269,4 +276,75 @@ void aasort(uint32_t n, uint32_t *in, uint32_t *out)
     if(currently_in_in) {
         memcpy(out, in, n * 4);
     }
+}
+
+/* 
+ * As AA-Sort's out-of-core algorithm is essentially quicksort, we
+ * naively parallelize it using a divide-and-conquer approach. We
+ * - for now - ignore the paper's advice on a parallel implementation
+ * (esp. the part about cooperating threads).
+ */
+
+static const uint32_t thread_depth = 2;
+typedef struct {
+        uint32_t td;
+    uint32_t n;
+    uint32_t *in;
+    uint32_t *out;
+} algorithm_params_st;
+
+void* aasort_naive_parallel_run(void *data)
+{
+    algorithm_params_st *params = (algorithm_params_st*) data;
+
+    if(params->n <= 1) {
+        *(params->out) = *(params->in);
+    } else if(params->td == 0) {
+        aasort(params->n, params->in, params->out);
+    }   else {
+        if(!l2_cache_set) {
+            l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
+            l2_cache_set = 1;
+        }
+        uint32_t block_size = l2_cache / 2;
+        uint32_t block_elements = block_size / 4;
+
+        uint32_t nl = (params->n / block_elements) / 2 * block_elements;
+        uint32_t nu = params->n - nl;
+
+        pthread_t t1, t2;
+        algorithm_params_st p1, p2;
+
+        p1.td = params->td - 1;
+        p1.n = nl;
+        p1.in = params->out;
+        p1.out = params->in;
+
+        pthread_create(&t1, NULL, aasort_naive_parallel_run, &p1);
+
+        p2.td = params->td - 1;
+        p2.n = nu;
+        p2.in = &(params->out[nl]);
+        p2.out = &(params->in[nl]);
+
+        pthread_create(&t2, NULL, aasort_naive_parallel_run, &p2);
+
+        pthread_join(t1, NULL);
+        pthread_join(t2, NULL);
+
+        aasort_out_of_core(nl, (__m128i*) params->in, nu,
+            (__m128i*) &(params->in[nl]), (__m128i*) params->out);
+    }
+
+    return NULL;
+}
+
+void aasort_naive_parallel(uint32_t n, uint32_t *in, uint32_t *out)
+{
+    algorithm_params_st s;
+    s.td = thread_depth;
+    s.n = n;
+    s.in = in;
+    s.out = out;
+    aasort_naive_parallel_run(&s);
 }

@@ -19,6 +19,7 @@ void quicksort_iterative(uint32_t, uint32_t*, uint32_t*);
 void quicksort_naive_parallel(uint32_t, uint32_t*, uint32_t*);
 void heapsort(uint32_t, uint32_t*, uint32_t*);
 void aasort(uint32_t, uint32_t*, uint32_t*);
+void aasort_naive_parallel(uint32_t, uint32_t*, uint32_t*);
 
 void insertionsort_asm(uint32_t, uint32_t*, uint32_t*);
 void bubblesort_asm(uint32_t, uint32_t*, uint32_t*);
