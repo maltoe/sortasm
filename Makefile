@@ -27,7 +27,7 @@ $(OBJS): %.o: %.c
 
 sortasm: $(C_ALGORITHM_OBJS) $(ASM_ALGORITHM_OBJS) $(OBJS)
 	@ echo Linking ...
-	@	gcc $(LDFLAGS) $(C_ALGORITHM_OBJS) $(ASM_ALGORITHM_OBJS) $(OBJS) -o sortasm
+	@	gcc $(C_ALGORITHM_OBJS) $(ASM_ALGORITHM_OBJS) $(OBJS) $(LDFLAGS) -o sortasm
 
 clean:
 	rm -f *.o algorithms/*.o sortasm.s sortasm 
