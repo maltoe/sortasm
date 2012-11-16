@@ -6,6 +6,7 @@
 /* ***************************************************************************
  * Prototypes.
  * ***************************************************************************/
+#include <sys/types.h>
 
 void insertionsort(uint32_t, uint32_t*, uint32_t*);
 void bubblesort(uint32_t, uint32_t*, uint32_t*);
@@ -27,6 +28,10 @@ void gnomesort_asm(uint32_t, uint32_t*, uint32_t*);
 void combsort_asm(uint32_t, uint32_t*, uint32_t*);
 void quicksort_iterative_asm(uint32_t, uint32_t*, uint32_t*);
 void heapsort_asm(uint32_t, uint32_t*, uint32_t*);
+
+#ifdef _AVX_
+void aasort256(uint32_t, uint32_t*, uint32_t*);
+#endif
 
 /* ***************************************************************************
  * C helper functions.

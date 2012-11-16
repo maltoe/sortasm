@@ -12,107 +12,140 @@
 
 typedef void (*sort_func)(uint32_t, uint32_t*, uint32_t*);
 
+typedef enum {
+  INT_OUTPUT,
+  FLOAT_OUTPUT
+} algorithm_data_e;
+
 typedef struct {
     const char *name;
     sort_func func;
     uint32_t max_n; // Do not run benchmarks for n larger than this value.
+    algorithm_data_e output;
 } algorithm_st;
 
 algorithm_st algorithms[] = {
     {
         "insertionsort",
         insertionsort,
-        200000
+        200000,
+        INT_OUTPUT
     },
     {
         "insertionsort_asm",
         insertionsort_asm,
-        200000
+        200000,
+        INT_OUTPUT
     },
     {
         "bubblesort",
         bubblesort,
-        100000
+        100000,
+        INT_OUTPUT
     },
     {
         "bubblesort_asm",
         bubblesort_asm,
-        100000
+        100000,
+        INT_OUTPUT
     },
     {
         "gnomesort",
         gnomesort,
-        100000
+        100000,
+        INT_OUTPUT
     },
     {
         "gnomesort_rewrite",
         gnomesort_rewrite,
-        100000
+        100000,
+        INT_OUTPUT
     },
     {
         "gnomesort_asm",
         gnomesort_asm,
-        100000
+        100000,
+        INT_OUTPUT
     },
     {
         "combsort",
         combsort,
-        500000
+        500000,
+        INT_OUTPUT
     },
     {
         "combsort_asm",
         combsort_asm,
-        500000
+        500000,
+        INT_OUTPUT
     },
     {
         "mergesort",
         mergesort,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },
     {
         "mergesort_parallel",
         mergesort_parallel,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },
     {
         "quicksort_recursive",
         quicksort_recursive,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },
     {
         "quicksort_iterative",
         quicksort_iterative,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },
     {
         "quicksort_iterative_asm",
         quicksort_iterative_asm,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },
     {
         "quicksort_naive_parallel",
         quicksort_naive_parallel,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },    
     {
         "heapsort",
         heapsort,
-        1000000
+        1000000,
+        INT_OUTPUT
     },
     {
         "heapsort_asm",
         heapsort_asm,
-        1000000
+        1000000,
+        INT_OUTPUT
     },
     {
         "aasort",
         aasort,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
     },
     {
         "aasort_naive_parallel",
         aasort_naive_parallel,
-        UINT_MAX
+        UINT_MAX,
+        INT_OUTPUT
+#ifdef _AVX_
+    },
+    {
+        "aasort256",
+        aasort256,
+        UINT_MAX,
+        FLOAT_OUTPUT
+#endif       
     }
 };
 
@@ -243,19 +276,25 @@ void benchmark(algorithm_st alg, uint32_t n, uint32_t *data, int print_results)
 
     // Verify results.
     for(uint32_t i = 0; i < n - 1; i++) {
-        if(out[i] > out[i + 1]) {
+        if(
+          ((alg.output == INT_OUTPUT) && (out[i] > out[i + 1])) || 
+          ((alg.output == FLOAT_OUTPUT) && ((float) out[i] > (float) out[i + 1]))) {
             printf("Resulting array is not sorted (position %u/%u): ", i, n);
 
             printf("... ");
             uint32_t from = i > 2 ? i - 2 : 0;
             uint32_t to = i + 4 <= n ? i + 4 : n;
-            for(int j = from; j < to; j++)
-                printf("%u ", out[j]);
+            for(int j = from; j < to; j++) {
+                if(alg.output == INT_OUTPUT)
+                  printf("%u ", out[j]);
+                else if(alg.output == FLOAT_OUTPUT)
+                  printf("%f ", (float) out[j]);
+            }
             printf("...\n");
 
             break;
         }
-    } 
+    }
 
     if(print_results) {
         for(uint32_t i = 0; i < n; i++)

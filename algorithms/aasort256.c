@@ -1,10 +1,17 @@
 #ifdef _AVX_
 
-#include <avxintrin.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <immintrin.h>
+#include <unistd.h>
+
+#include "algorithms.h"
 
 /*
  * This is an AVX-based version of AA-Sort.
  */
+
+static uint32_t l2_cache = 0;
 
 /*
  * Found at Keven Stock's page:
@@ -52,6 +59,73 @@ void aasort256_vector_cmpswap(__m256 *in, int i, int j)
     in[i] = t;
 }
 
+/* 
+ * Replacements for missing AVX shift-left instructions.
+ *
+ * Found here: http://masm32.com/board/index.php?topic=465.0
+ */
+#ifndef DEBUG
+inline
+#endif
+__m256 _mm256_slli_ps(__m256 arg, int count)
+{
+    __m128 arg_low =  _mm256_castps256_ps128(arg);
+    __m128 arg_hi =   _mm256_extractf128_ps(arg, 1);
+    __m128 newlow = (__m128)_mm_slli_epi32((__m128i)arg_low, count);
+    __m128 newhi  = (__m128)_mm_slli_epi32((__m128i)arg_hi,  count);
+    __m256 result = _mm256_castps128_ps256(newlow);
+    result = _mm256_insertf128_ps(result,  newhi, 1);
+    return result;
+}
+
+#ifndef DEBUG
+inline
+#endif
+__m256 _mm256_srli_ps(__m256 arg, int count)
+{
+    __m128 arg_low =  _mm256_castps256_ps128(arg);
+    __m128 arg_hi =   _mm256_extractf128_ps(arg, 1);
+
+    __m128 newlow = (__m128)_mm_srli_epi32((__m128i)arg_low, count);
+    __m128 newhi  = (__m128)_mm_srli_epi32((__m128i)arg_hi,  count);
+
+    __m256 result = _mm256_castps128_ps256(newlow);
+    result = _mm256_insertf128_ps(result,  newhi, 1);
+    return result;
+}
+
+/*
+ * Replacements for missing AVX palignr instruction.
+ *
+ * Found here:
+ */
+#ifndef DEBUG
+inline
+#endif
+__m256 _mm256_alignr_epi8(__m256 v0, __m256 v1, const int n)
+{
+    float buffer[16] __attribute__((aligned(32)));
+
+    // Two aligned stores to fill the buffer.
+    _mm256_store_ps(buffer, v0);
+    _mm256_store_ps(&buffer[8], v1);
+
+    // Misaligned load to get the data we want.
+    return _mm256_loadu_ps(&buffer[n]);
+}
+
+#ifndef DEBUG
+inline
+#endif
+void aasort256_vector_cmpswap_skew(__m256 *in, int i, int j)
+{
+    __m256 x = _mm256_slli_ps(in[i], 4);
+    __m256 y = _mm256_min_ps(in[j], x);
+    in[j] = _mm256_max_ps(in[j], x);
+    in[i] = _mm256_srli_ps(in[i], 12);
+    in[i] = _mm256_alignr_epi8(in[i], y, 4);
+}
+
 #ifndef DEBUG
 inline
 #endif
@@ -69,20 +143,32 @@ uint32_t aasort256_in_core(uint32_t n, __m256 *in, __m256 *out)
     const uint32_t nv = n / 8;
     
     /*
-     * (1) Sort values within each vector in ascending order.
-     *
-     * NOTE: Although not explicitly stated in the paper,
-     * efficient data-parallel sorting requires to rearrange
-     * the data of 4 vectors, i.e., sort the first elements
-     * in one vector, the second elements in the next, and so on.
+     * (1) Sort values within each vector in ascending order using a sorting network.
      */
 
     for(uint32_t i = 0; i < nv; i += 8) {
-        __m256 t[8];
         __m256 *x = &in[i];
-
-        /* TODO: optimal min/max based sorting
-
+        
+        aasort256_vector_cmpswap(x, 0, 1);
+        aasort256_vector_cmpswap(x, 2, 3);
+        aasort256_vector_cmpswap(x, 4, 5);
+        aasort256_vector_cmpswap(x, 6, 7);
+        aasort256_vector_cmpswap(x, 0, 2);
+        aasort256_vector_cmpswap(x, 1, 3);
+        aasort256_vector_cmpswap(x, 4, 6);
+        aasort256_vector_cmpswap(x, 5, 7);
+        aasort256_vector_cmpswap(x, 1, 2);
+        aasort256_vector_cmpswap(x, 5, 6);
+        aasort256_vector_cmpswap(x, 0, 4);
+        aasort256_vector_cmpswap(x, 1, 5);
+        aasort256_vector_cmpswap(x, 2, 6);
+        aasort256_vector_cmpswap(x, 3, 7);
+        aasort256_vector_cmpswap(x, 2, 4);
+        aasort256_vector_cmpswap(x, 3, 5);
+        aasort256_vector_cmpswap(x, 1, 2);
+        aasort256_vector_cmpswap(x, 3, 4);
+        aasort256_vector_cmpswap(x, 5, 6);
+        
         aasort256_vector_transpose(x);
     }
 
@@ -139,6 +225,31 @@ uint32_t aasort256_in_core(uint32_t n, __m256 *in, __m256 *out)
     }
 
     return 1;
+}
+
+void aasort256(uint32_t n, uint32_t *in, uint32_t *out)
+{
+    /*
+     * (1) Divide all of the data to be sorted into blocks that
+     * fit in the cache or the local memory of the processor.
+     */
+
+    // As stated in the paper, we use half the L2 cache as block size.
+    if(!l2_cache)
+        l2_cache = (uint32_t) sysconf(_SC_LEVEL2_CACHE_SIZE);
+    uint32_t block_size = l2_cache / 2;
+    uint32_t block_elements = block_size / 8;
+
+    for(uint32_t i = 0; i < n; i += block_elements) {
+        uint32_t k = min(n - i, block_elements);
+
+        /*
+         * (2) Sort each block with the in-core sorting algorithm.
+         */
+
+        if(!aasort256_in_core(k, (__m256*) &in[i], (__m256*) &out[i]))
+            return;
+    }
 }
 
 #endif /* AVX */
